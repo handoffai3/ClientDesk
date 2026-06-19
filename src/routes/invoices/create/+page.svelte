@@ -2,7 +2,7 @@
   import { supabase } from '$lib/supabaseClient';
   import { authState } from '$lib/auth.svelte';
   import { goto } from '$app/navigation';
-  import { agencyDataStore } from '../../stores/agencyData';
+  import { agencyDataStore } from '../../../stores/agencyData';
   import AgencyHeader from '$lib/components/AgencyHeader.svelte';
 
   let saving = $state(false);
