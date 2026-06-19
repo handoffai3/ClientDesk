@@ -2,14 +2,15 @@
   import { supabase } from '$lib/supabaseClient';
   import { authState } from '$lib/auth.svelte';
   import { goto } from '$app/navigation';
+  import { agencyDataStore } from '../../stores/agencyData';
+  import AgencyHeader from '$lib/components/AgencyHeader.svelte';
 
-  const navTabs = ['Dashboard', 'Projects', 'Clients', 'Files', 'Invoices', 'Messages'];
-
-  let clients = $state<any[]>([]);
-  let projects = $state<any[]>([]);
-  let userMenuOpen = $state(false);
   let saving = $state(false);
   let errorMsg = $state('');
+
+  // Derive clients and projects from the global store
+  let clients = $derived($agencyDataStore.clients);
+  let projects = $derived($agencyDataStore.projects);
 
   // Form state
   let clientId = $state('');
@@ -56,25 +57,15 @@
     }
   });
 
-  async function loadData() {
-    if (!authState.agencyId) return;
-    const { data: c } = await supabase.from('clients').select('id, full_name, company, location').eq('agency_id', authState.agencyId).order('full_name');
-    if (c) clients = c;
-    const { data: p } = await supabase.from('projects').select('id, name, client_id').eq('agency_id', authState.agencyId).order('name');
-    if (p) projects = p;
-
-    const year = new Date().getFullYear();
-    const { count } = await supabase
-      .from('invoices')
-      .select('*', { count: 'exact', head: true })
-      .eq('agency_id', authState.agencyId);
-    
-    const nextNum = (count || 0) + 1;
-    invoiceNumber = `INV-${year}-${nextNum.toString().padStart(3, '0')}`;
-  }
-
+  // Generate invoice number from existing store data
+  let invoiceNumberGenerated = false;
   $effect(() => {
-    if (!authState.loading && authState.agencyId) loadData();
+    if ($agencyDataStore.loaded && !invoiceNumberGenerated) {
+      invoiceNumberGenerated = true;
+      const year = new Date().getFullYear();
+      const nextNum = ($agencyDataStore.invoices.length || 0) + 1;
+      invoiceNumber = `INV-${year}-${nextNum.toString().padStart(3, '0')}`;
+    }
   });
 
   async function handleSave(status: 'pending' | 'paid') {
@@ -83,7 +74,7 @@
     saving = true;
     errorMsg = '';
 
-    // 1. Insert invoice
+    // 1. Insert invoice — select full row plus joined client data
     const { data: inv, error: invErr } = await supabase
       .from('invoices')
       .insert({
@@ -100,7 +91,7 @@
         due_date: dueDate || null,
         notes: notes || null
       })
-      .select('id')
+      .select('*, clients(full_name, avatar_url)')
       .single();
 
     if (invErr) {
@@ -124,21 +115,17 @@
       await supabase.from('invoice_items').insert(items);
     }
 
+    // 3. Push the new invoice into the global store so /invoices sees it instantly
+    agencyDataStore.update(s => ({
+      ...s,
+      invoices: [inv, ...s.invoices]
+    }));
+
     saving = false;
     goto('/invoices');
   }
 
-  function tabHref(tab: string) {
-    if (tab === 'Dashboard') return '/';
-    if (tab === 'Projects') return '/projects';
-    if (tab === 'Clients') return '/clients';
-    if (tab === 'Files') return '/files';
-    if (tab === 'Invoices') return '/invoices';
-    return `/?tab=${tab}`;
-  }
-
   async function handleSignOut() {
-    userMenuOpen = false;
     await supabase.auth.signOut();
     goto('/login');
   }
@@ -158,38 +145,7 @@
 </style>
 
 <div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex overflow-hidden w-full">
-  <!-- Top Nav -->
-  <div class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-surface/90 backdrop-blur-xl shadow-sm border-b border-outline-variant/10">
-    <div class="flex items-center gap-8 w-full max-w-container-max mx-auto justify-between">
-      <div class="flex items-center gap-8">
-        <a href="/" class="font-headline-md text-headline-md font-bold text-primary">{authState.agencyName || 'ClientDesk'}</a>
-        <nav class="hidden md:flex gap-8">
-          {#each navTabs as tab}
-            <a href={tabHref(tab)} class="relative font-label-md text-label-md transition-colors duration-150 py-5 focus:outline-none {tab === 'Invoices' ? 'text-primary border-b-2 border-primary font-bold' : 'text-on-surface-variant hover:text-on-surface'}">{tab}</a>
-          {/each}
-        </nav>
-      </div>
-      <div class="flex items-center gap-4">
-        <div class="relative">
-          <button class="flex items-center active:scale-95 transition-transform duration-150 focus:outline-none" onclick={() => userMenuOpen = !userMenuOpen}>
-            <img alt="User avatar" class="w-8 h-8 rounded-full border border-outline-variant object-cover hover:border-primary transition-colors" src="https://lh3.googleusercontent.com/aida-public/AB6AXuBxwSVvb_fIogrcoBmjb3RFOseMlp7ZlQW5UR7wn7k2TUPqho3kL_wgmKdxfNfbmBZt0_3NI5wgM0D3ouDRj8e9hVeue2XIB77dY5A0onBiPzeaW2r20LW-VONp7JXcwEyqaXtMu6Pn8RqtTfWRwGhHPxBM7_JP3p7JqUqtGW7hAxADfGOI2ViGlUKPcWLkm6P-5y5tMJK4EuXoQRCbpAKVxw57QJdS7TzGXoyCMfB5RekZGyw_bQKaip-8KAkeZeLxB-qA8R_LlLEE" />
-          </button>
-          {#if userMenuOpen}
-            <div class="absolute right-0 top-10 w-48 bg-surface-container-lowest border border-outline-variant/50 rounded-xl shadow-lg py-2 z-50">
-              <div class="px-4 py-2 border-b border-outline-variant/30">
-                <p class="text-xs font-semibold text-on-surface">{authState.userFullName || 'User'}</p>
-                <p class="text-[10px] text-outline truncate">{authState.user?.email || ''}</p>
-              </div>
-              <hr class="border-outline-variant/30 my-1" />
-              <button class="w-full text-left px-4 py-2 text-xs text-error hover:bg-error-container/20 transition-colors flex items-center gap-2" onclick={handleSignOut}>
-                <span class="material-symbols-outlined text-sm">logout</span> Sign Out
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-    </div>
-  </div>
+  <AgencyHeader activeTab="Invoices" />
 
   <!-- Main -->
   <main class="flex-1 overflow-y-auto mt-16 px-margin-desktop py-8 max-w-container-max mx-auto w-full space-y-stack-md">
