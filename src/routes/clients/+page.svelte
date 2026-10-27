@@ -13,6 +13,9 @@
   let showModal = $state(false);
   let userMenuOpen = $state(false);
   let searchQuery = $state('');
+  let statusFilter = $state<'all' | 'active' | 'inactive'>('all');
+  let currentPage = $state(1);
+  const PAGE_SIZE = 12;
 
   // Form fields
   let fullName = $state('');
@@ -26,17 +29,48 @@
   let clients = $derived($agencyDataStore.clients);
   let loadingClients = $derived(!$agencyDataStore.loaded);
 
-  // Derived filtered clients list
-  let filteredClients = $derived(
-    clients.filter(c => {
-      const term = searchQuery.toLowerCase();
-      return (
+  let filteredClients = $derived.by(() => {
+    let result = clients;
+    if (statusFilter !== 'all') {
+      result = result.filter(c => c.status === statusFilter);
+    }
+    const term = searchQuery.toLowerCase();
+    if (term) {
+      result = result.filter(c =>
         c.full_name?.toLowerCase().includes(term) ||
         c.company?.toLowerCase().includes(term) ||
         c.email?.toLowerCase().includes(term)
       );
-    })
-  );
+    }
+    return result;
+  });
+
+  let totalPages = $derived(Math.max(1, Math.ceil(filteredClients.length / PAGE_SIZE)));
+  let paginatedClients = $derived(filteredClients.slice((currentPage - 1) * PAGE_SIZE, currentPage * PAGE_SIZE));
+
+  $effect(() => {
+    if (searchQuery || statusFilter) currentPage = 1;
+  });
+
+  function exportCsv() {
+    const headers = ['Name', 'Company', 'Email', 'Phone', 'Location', 'Status'];
+    const rows = filteredClients.map(c => [
+      c.full_name || '',
+      c.company || '',
+      c.email || '',
+      c.phone || '',
+      c.location || '',
+      c.status || ''
+    ]);
+    const csv = [headers, ...rows].map(r => r.map(v => `"${String(v).replace(/"/g, '""')}"`).join(',')).join('\n');
+    const blob = new Blob([csv], { type: 'text/csv' });
+    const url = URL.createObjectURL(blob);
+    const a = document.createElement('a');
+    a.href = url;
+    a.download = `clients-${new Date().toISOString().split('T')[0]}.csv`;
+    a.click();
+    URL.revokeObjectURL(url);
+  }
 
   async function handleAddClient(e: Event) {
     e.preventDefault();
@@ -92,70 +126,89 @@
   <AgencyHeader activeTab="Clients" />
 
   <!-- Main Content Area -->
-  <main class="flex-1 overflow-y-auto mt-16 px-margin-desktop py-8 max-w-container-max mx-auto w-full">
-    <!-- Hero Header -->
-    <section class="rounded-xl overflow-hidden shadow-lg mb-stack-md bg-gradient-to-br from-primary to-secondary p-8 md:p-12 relative flex flex-col md:flex-row items-center justify-between gap-6 group hover:-translate-y-1 transition-transform duration-300">
-      <div class="absolute inset-0 bg-white/5 opacity-50 pointer-events-none" />
-      <div class="relative z-10 flex-1 w-full text-center md:text-left">
-        <h1 class="font-display-lg text-display-lg text-white mb-2">Client Directory</h1>
-        <p class="font-body-lg text-body-lg text-white/90">Manage your client relationships</p>
-        <div class="mt-6 inline-flex items-end gap-3 bg-white/10 backdrop-blur-md px-6 py-4 rounded-lg border border-white/20">
-          <span class="font-display-lg text-display-lg text-white leading-none">{clients.length}</span>
-          <span class="font-label-md text-label-md text-white/80 uppercase tracking-wider pb-1">Total Clients</span>
-        </div>
+  <main class="flex-1 overflow-y-auto mt-14 px-6 py-6 max-w-container-max mx-auto w-full">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 animate-fadeIn">
+      <div>
+        <h1 class="text-xl font-semibold text-on-surface mb-1">Clients</h1>
+        <p class="text-sm text-on-surface-variant">{clients.length} total clients</p>
       </div>
-      <div class="relative z-10 w-full md:w-auto mt-6 md:mt-0 flex justify-center md:justify-end">
-        <button
-          onclick={() => showModal = true}
-          class="bg-[#10b981] hover:bg-[#059669] text-white font-title-md text-title-md px-8 py-4 rounded-lg shadow-md transition-all duration-200 active:scale-95 flex items-center gap-2 w-full md:w-auto justify-center"
-        >
-          <span class="material-symbols-outlined">add</span>
-          Add Client
-        </button>
-      </div>
-    </section>
+      <button
+        onclick={() => showModal = true}
+        class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 w-fit"
+      >
+        <span class="material-symbols-outlined text-[18px]">add</span>
+        Add Client
+      </button>
+    </div>
 
-    <!-- Search / Controls -->
-    <section class="mb-stack-md flex flex-col md:flex-row gap-4 items-center justify-between bg-surface p-4 rounded-xl shadow-sm border border-outline-variant/30">
-      <div class="relative w-full flex-1">
-        <span class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant">search</span>
+    <div class="flex flex-col md:flex-row gap-3 items-center justify-between mb-5">
+      <div class="relative flex-1">
+        <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
         <input
-          class="w-full pl-12 pr-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow text-on-surface placeholder:text-on-surface-variant"
-          placeholder="Search clients by name, company, or email..."
+          class="w-full pl-9 pr-3 py-1.5 bg-white border border-outline-variant rounded-lg text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors placeholder:text-outline"
+          placeholder="Search clients..."
           type="text"
           bind:value={searchQuery}
         />
       </div>
-    </section>
+      <div class="flex items-center gap-2 shrink-0">
+        <select
+          class="px-3 py-1.5 bg-white border border-outline-variant rounded-lg text-sm text-on-surface focus:border-primary focus:ring-1 focus:ring-primary outline-none"
+          bind:value={statusFilter}
+        >
+          <option value="all">All Status</option>
+          <option value="active">Active</option>
+          <option value="inactive">Inactive</option>
+        </select>
+        <button
+          onclick={exportCsv}
+          class="px-3 py-1.5 bg-white border border-outline-variant rounded-lg text-sm text-on-surface-variant hover:text-on-surface hover:bg-surface-container-low transition-colors flex items-center gap-1.5"
+        >
+          <span class="material-symbols-outlined text-[16px]">download</span> Export
+        </button>
+      </div>
+    </div>
 
     <!-- Client Cards Grid -->
     {#if loadingClients}
-      <div class="py-20 flex justify-center items-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
-      </div>
+      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
+        {#each Array(8) as _}
+          <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+            <div class="flex items-center gap-3 mb-3">
+              <div class="w-9 h-9 rounded-full animate-shimmer"></div>
+              <div class="flex-1">
+                <div class="h-3.5 animate-shimmer rounded w-3/4 mb-1.5"></div>
+                <div class="h-3 animate-shimmer rounded w-1/2"></div>
+              </div>
+            </div>
+            <div class="h-3 animate-shimmer rounded w-full mb-1.5"></div>
+            <div class="h-3 animate-shimmer rounded w-2/3"></div>
+          </div>
+        {/each}
+      </section>
     {:else if filteredClients.length === 0}
-      <div class="py-20 text-center bg-surface border border-outline-variant/30 rounded-xl">
-        <span class="material-symbols-outlined text-5xl text-outline-variant mb-4">group_off</span>
-        <h3 class="font-title-md text-title-md text-on-surface font-semibold mb-1">No clients found</h3>
-        <p class="font-body-md text-body-md text-on-surface-variant">
+      <div class="py-16 text-center border border-dashed border-outline-variant rounded-lg">
+        <span class="material-symbols-outlined text-[28px] text-outline mb-2 block">group_off</span>
+        <h3 class="text-sm font-medium text-on-surface mb-1">No clients found</h3>
+        <p class="text-[13px] text-on-surface-variant">
           {#if searchQuery}
             Try adjusting your search terms.
           {:else}
-            Get started by adding your first client!
+            Get started by adding your first client.
           {/if}
         </p>
       </div>
     {:else}
-      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-gutter mb-12">
-        {#each filteredClients as client (client.id)}
+      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3 mb-6">
+        {#each paginatedClients as client (client.id)}
           {@const mappedClient = {
             id: client.id,
             initials: client.full_name ? client.full_name.substring(0, 2).toUpperCase() : 'CL',
             name: client.full_name,
             industry: client.company || 'Private Client',
             projectsCount: client.projects?.[0]?.count || 0,
-            status: client.status === 'active' ? 'Active' : 'Inactive',
-            theme: ['primary', 'secondary', 'tertiary'][client.full_name.length % 3]
+            status: (client.status === 'active' ? 'Active' : 'Inactive') as 'Active' | 'Inactive',
+            theme: (['primary', 'secondary', 'tertiary'] as const)[client.full_name.length % 3]
           }}
           <ClientCard
             client={mappedClient}
@@ -163,21 +216,49 @@
           />
         {/each}
       </section>
+
+      {#if totalPages > 1}
+        <div class="flex justify-center items-center gap-2 mb-12">
+          <button
+            class="px-3 py-2 rounded-lg text-sm font-medium transition-colors {currentPage === 1 ? 'text-outline cursor-not-allowed' : 'text-primary hover:bg-primary-container'}"
+            disabled={currentPage === 1}
+            onclick={() => currentPage = Math.max(1, currentPage - 1)}
+          >
+            <span class="material-symbols-outlined text-sm">chevron_left</span>
+          </button>
+          {#each Array.from({ length: totalPages }, (_, i) => i + 1) as pg}
+            <button
+              class="w-9 h-9 rounded-lg text-sm font-medium transition-colors {pg === currentPage ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:bg-surface-variant'}"
+              onclick={() => currentPage = pg}
+            >
+              {pg}
+            </button>
+          {/each}
+          <button
+            class="px-3 py-2 rounded-lg text-sm font-medium transition-colors {currentPage === totalPages ? 'text-outline cursor-not-allowed' : 'text-primary hover:bg-primary-container'}"
+            disabled={currentPage === totalPages}
+            onclick={() => currentPage = Math.min(totalPages, currentPage + 1)}
+          >
+            <span class="material-symbols-outlined text-sm">chevron_right</span>
+          </button>
+          <span class="text-xs text-on-surface-variant ml-2">{filteredClients.length} clients</span>
+        </div>
+      {/if}
     {/if}
   </main>
 </div>
 
 <!-- Add Client Modal -->
 {#if showModal}
-  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm">
-    <div class="bg-surface-container-lowest w-full max-w-md rounded-2xl p-6 shadow-2xl border border-outline-variant/40 mx-4">
-      <div class="flex justify-between items-center mb-6">
-        <h3 class="font-title-md text-title-md font-bold text-on-surface">Add New Client</h3>
+  <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+    <div class="bg-white w-full max-w-md rounded-lg p-5 shadow-lg border border-outline-variant mx-4 animate-fadeIn">
+      <div class="flex justify-between items-center mb-5">
+        <h3 class="text-[15px] font-semibold text-on-surface">Add New Client</h3>
         <button
-          class="text-on-surface-variant hover:text-primary p-1 rounded-full hover:bg-surface-container"
+          class="text-on-surface-variant hover:text-on-surface w-8 h-8 rounded-lg hover:bg-surface-container flex items-center justify-center"
           onclick={() => showModal = false}
         >
-          <span class="material-symbols-outlined block">close</span>
+          <span class="material-symbols-outlined text-[18px]">close</span>
         </button>
       </div>
 
@@ -251,19 +332,19 @@
           />
         </div>
 
-        <div class="flex gap-3 pt-4">
+        <div class="flex gap-3 pt-4 border-t border-outline-variant mt-1">
           <button
             type="button"
             onclick={() => showModal = false}
             disabled={isSaving}
-            class="flex-1 py-2 rounded-lg border border-outline text-on-surface-variant hover:bg-surface-variant text-sm font-semibold transition-colors"
+            class="flex-1 py-2 rounded-lg border border-outline-variant text-on-surface-variant hover:bg-surface-container-low text-sm font-medium transition-colors"
           >
             Cancel
           </button>
           <button
             type="submit"
             disabled={isSaving}
-            class="flex-1 py-2 bg-primary text-white hover:bg-primary/95 rounded-lg text-sm font-semibold transition-colors flex items-center justify-center gap-2"
+            class="flex-1 py-2 bg-primary text-white hover:bg-primary-hover rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-2"
           >
             {#if isSaving}
               <svg class="animate-spin h-4 w-4 text-white" fill="none" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">

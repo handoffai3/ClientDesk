@@ -151,7 +151,7 @@
 
     const path = `${authState.agencyId}/${Date.now()}_${file.name}`;
     const { error: uploadErr } = await supabase.storage.from('ClientDeskBucket').upload(path, file);
-    if (uploadErr) { console.error('Upload error:', uploadErr); sending = false; return; }
+    if (uploadErr) { sending = false; return; }
 
     const { data: urlData } = supabase.storage.from('ClientDeskBucket').getPublicUrl(path);
     const fileUrl = urlData?.publicUrl || '';
@@ -240,67 +240,55 @@
 
 <svelte:head><title>Messages - ClientDesk</title></svelte:head>
 
-<style>
-  .custom-scrollbar::-webkit-scrollbar { width: 6px; }
-  .custom-scrollbar::-webkit-scrollbar-track { background: transparent; }
-  .custom-scrollbar::-webkit-scrollbar-thumb { background-color: rgba(204, 195, 216, 0.5); border-radius: 20px; }
-  .bg-gradient-hero { background: linear-gradient(135deg, #630ed4 0%, #ff52a4 100%); }
-  .bg-gradient-bubble { background: linear-gradient(135deg, #7c3aed 0%, #630ed4 100%); }
-</style>
 
-<div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex flex-col overflow-hidden w-full">
+<div class="fixed inset-0 bg-background text-on-background flex flex-col overflow-hidden w-full">
   <AgencyHeader activeTab="Messages" />
 
-  <!-- Main two-panel layout -->
-  <div class="flex flex-1 overflow-hidden max-w-container-max mx-auto w-full shadow-lg bg-surface">
+  <div class="flex flex-1 overflow-hidden max-w-container-max mx-auto w-full mt-14 bg-white border-x border-outline-variant">
     <!-- Left Panel: Conversations -->
-    <div class="w-full md:w-[340px] lg:w-[380px] bg-surface-container-low flex flex-col h-full border-r border-surface-variant shrink-0">
-      <div class="p-4">
-        <div class="bg-gradient-hero rounded-xl p-4 shadow-md text-on-primary flex justify-between items-center">
-          <h1 class="font-headline-md text-headline-md">Messages</h1>
-          {#if totalUnread > 0}
-            <span class="bg-surface/20 text-on-primary px-3 py-1 rounded-full font-label-md text-label-md border border-surface/30 backdrop-blur-sm">{totalUnread} Unread</span>
-          {/if}
+    <div class="w-full md:w-[320px] lg:w-[360px] bg-surface-container-low flex flex-col h-full border-r border-outline-variant shrink-0">
+      <div class="px-4 py-3 border-b border-outline-variant flex items-center justify-between">
+        <h1 class="text-[15px] font-semibold text-on-surface">Messages</h1>
+        {#if totalUnread > 0}
+          <span class="bg-primary text-white px-2 py-0.5 rounded-md text-[11px] font-medium">{totalUnread}</span>
+        {/if}
+      </div>
+
+      <div class="px-4 py-2.5">
+        <div class="relative">
+          <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
+          <input class="w-full pl-9 pr-3 py-1.5 bg-white border border-outline-variant rounded-lg text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors placeholder:text-outline" placeholder="Search conversations..." type="text" bind:value={searchQuery} />
         </div>
       </div>
 
-      <div class="px-4 pb-3">
-        <div class="relative group">
-          <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline group-focus-within:text-primary transition-colors">search</span>
-          <input class="w-full pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary transition-all text-on-surface placeholder:text-outline" placeholder="Search conversations..." type="text" bind:value={searchQuery} />
-        </div>
-      </div>
-
-      <div class="flex-1 overflow-y-auto custom-scrollbar px-4 pb-4 space-y-2">
+      <div class="flex-1 overflow-y-auto px-3 pb-3 space-y-1">
         {#if filteredConversations.length === 0}
           <div class="text-center py-12 text-on-surface-variant">
-            <span class="material-symbols-outlined text-4xl mb-2 block">forum</span>
-            <p class="font-body-md text-body-md">No conversations yet</p>
+            <span class="material-symbols-outlined text-[28px] mb-2 block text-outline">forum</span>
+            <p class="text-sm">No conversations yet</p>
           </div>
         {/if}
         {#each filteredConversations as conv (conv.client_id)}
           <button
-            class="w-full text-left bg-surface rounded-xl p-3 flex gap-3 cursor-pointer relative shadow-[0_4px_20px_rgba(0,0,0,0.05)] transition-all group focus:outline-none {conv.client_id === selectedClientId ? 'border-l-4 border-l-primary shadow-[0_10px_25px_rgba(0,0,0,0.08)]' : 'border-l-4 border-l-transparent border hover:border-surface-variant hover:shadow-[0_10px_25px_rgba(0,0,0,0.08)] opacity-75 hover:opacity-100'}"
+            class="w-full text-left rounded-lg p-2.5 flex gap-2.5 cursor-pointer relative transition-colors focus:outline-none {conv.client_id === selectedClientId ? 'bg-primary/[0.06]' : 'hover:bg-surface-container'}"
             onclick={() => selectClient(conv.client_id)}
           >
             <div class="relative shrink-0">
               {#if conv.client_avatar}
-                <img alt={conv.client_name} class="w-12 h-12 rounded-full object-cover" src={conv.client_avatar} />
+                <img alt={conv.client_name} class="w-9 h-9 rounded-full object-cover" src={conv.client_avatar} />
               {:else}
-                <div class="w-12 h-12 rounded-full flex items-center justify-center font-title-md text-title-md bg-primary-container text-on-primary-container">{initials(conv.client_name)}</div>
+                <div class="w-9 h-9 rounded-full flex items-center justify-center text-xs font-medium bg-primary/10 text-primary">{initials(conv.client_name)}</div>
               {/if}
             </div>
             <div class="flex-1 min-w-0">
-              <div class="flex justify-between items-baseline mb-1">
-                <h3 class="font-title-md text-title-md text-on-surface truncate pr-2">{conv.client_name}</h3>
-                <span class="font-label-md text-label-md {conv.unread_count > 0 ? 'text-primary' : 'text-on-surface-variant'} shrink-0">{formatRelativeTime(conv.last_time)}</span>
+              <div class="flex justify-between items-baseline mb-0.5">
+                <h3 class="text-sm font-medium text-on-surface truncate pr-2">{conv.client_name}</h3>
+                <span class="text-[11px] {conv.unread_count > 0 ? 'text-primary font-medium' : 'text-outline'} shrink-0">{formatRelativeTime(conv.last_time)}</span>
               </div>
-              <p class="font-body-md text-body-md {conv.unread_count > 0 ? 'text-on-surface font-medium' : 'text-on-surface-variant'} truncate">{conv.last_message || 'No messages'}</p>
+              <p class="text-[13px] {conv.unread_count > 0 ? 'text-on-surface font-medium' : 'text-on-surface-variant'} truncate">{conv.last_message || 'No messages'}</p>
             </div>
-            {#if conv.client_id === selectedClientId}
-              <div class="absolute right-3 top-1/2 -translate-y-1/2 w-2 h-2 bg-primary rounded-full"></div>
-            {:else if conv.unread_count > 0}
-              <div class="absolute right-3 top-1/2 -translate-y-1/2 bg-primary text-on-primary w-5 h-5 rounded-full flex items-center justify-center font-label-md text-[10px]">{conv.unread_count}</div>
+            {#if conv.unread_count > 0 && conv.client_id !== selectedClientId}
+              <div class="absolute right-2.5 top-1/2 -translate-y-1/2 bg-primary text-white w-[18px] h-[18px] rounded-full flex items-center justify-center text-[10px] font-medium">{conv.unread_count}</div>
             {/if}
           </button>
         {/each}
@@ -308,86 +296,81 @@
     </div>
 
     <!-- Right Panel: Chat Area -->
-    <div class="hidden md:flex flex-col flex-1 bg-surface relative h-full">
+    <div class="hidden md:flex flex-col flex-1 bg-white relative h-full">
       {#if selectedClientId && selectedClient}
-        <!-- Chat Header -->
-        <div class="h-20 border-b border-surface-variant flex items-center justify-between px-6 shrink-0 bg-surface/80 backdrop-blur-md z-10">
-          <div class="flex items-center gap-4">
+        <div class="h-14 border-b border-outline-variant flex items-center justify-between px-5 shrink-0 bg-white z-10">
+          <div class="flex items-center gap-3">
             {#if selectedClient.client_avatar}
-              <img alt={selectedClient.client_name} class="w-12 h-12 rounded-full object-cover" src={selectedClient.client_avatar} />
+              <img alt={selectedClient.client_name} class="w-8 h-8 rounded-full object-cover" src={selectedClient.client_avatar} />
             {:else}
-              <div class="w-12 h-12 rounded-full flex items-center justify-center font-title-md text-title-md bg-primary-container text-on-primary-container">{initials(selectedClient.client_name)}</div>
+              <div class="w-8 h-8 rounded-full flex items-center justify-center text-xs font-medium bg-primary/10 text-primary">{initials(selectedClient.client_name)}</div>
             {/if}
             <div>
-              <h2 class="font-title-md text-title-md text-on-surface">{selectedClient.client_name}</h2>
+              <h2 class="text-sm font-medium text-on-surface">{selectedClient.client_name}</h2>
               {#if selectedClient.client_company}
-                <p class="font-body-md text-body-md text-on-surface-variant">{selectedClient.client_company}</p>
+                <p class="text-xs text-on-surface-variant">{selectedClient.client_company}</p>
               {/if}
             </div>
           </div>
-          <div class="flex items-center gap-2">
-            <button class="w-10 h-10 rounded-full hover:bg-surface-variant flex items-center justify-center text-on-surface-variant transition-colors focus:outline-none"><span class="material-symbols-outlined">call</span></button>
-            <button class="w-10 h-10 rounded-full hover:bg-surface-variant flex items-center justify-center text-on-surface-variant transition-colors focus:outline-none"><span class="material-symbols-outlined">videocam</span></button>
+          <div class="flex items-center gap-1">
+            <button class="w-8 h-8 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors focus:outline-none"><span class="material-symbols-outlined text-[18px]">call</span></button>
+            <button class="w-8 h-8 rounded-lg hover:bg-surface-container flex items-center justify-center text-on-surface-variant transition-colors focus:outline-none"><span class="material-symbols-outlined text-[18px]">videocam</span></button>
           </div>
         </div>
 
         <!-- Messages Area -->
-        <div bind:this={messagesContainer} class="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-4 bg-surface-bright">
+        <div bind:this={messagesContainer} class="flex-1 overflow-y-auto p-5 space-y-3 bg-surface-container-low">
           {#each messages as msg, idx (msg.id)}
             <!-- Date separator -->
             {#if needsDateSep(messages, idx)}
-              <div class="flex justify-center my-4">
-                <span class="bg-surface-variant text-on-surface-variant px-3 py-1 rounded-full font-label-md text-label-md">{formatDateSep(msg.created_at)}</span>
+              <div class="flex justify-center my-3">
+                <span class="bg-white text-on-surface-variant px-2.5 py-0.5 rounded-md text-[11px] font-medium border border-outline-variant">{formatDateSep(msg.created_at)}</span>
               </div>
             {/if}
 
             {#if msg.sender_type === 'agency'}
-              <!-- Agency message (right) -->
               <div class="flex justify-end">
                 <div class="max-w-[70%]">
                   {#if msg.file_url}
-                    <div class="bg-surface border border-outline-variant p-3 rounded-2xl rounded-tr-sm shadow-sm flex items-center gap-3 hover:border-primary transition-colors group">
-                      <div class="w-10 h-10 rounded-lg bg-primary/10 flex items-center justify-center text-primary group-hover:bg-primary group-hover:text-on-primary transition-colors">
-                        <span class="material-symbols-outlined">description</span>
+                    <div class="bg-white border border-outline-variant p-2.5 rounded-lg rounded-tr-sm shadow-xs flex items-center gap-2.5">
+                      <div class="w-8 h-8 rounded-lg bg-primary/[0.06] flex items-center justify-center text-primary">
+                        <span class="material-symbols-outlined text-[18px]">description</span>
                       </div>
-                      <div class="flex-1 min-w-0">
-                        <p class="font-title-md text-sm text-on-surface truncate">{msg.file_name || 'File'}</p>
-                      </div>
-                      <a href={msg.file_url} target="_blank" rel="noopener noreferrer" class="text-outline hover:text-primary transition-colors focus:outline-none"><span class="material-symbols-outlined">download</span></a>
+                      <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name || 'File'}</p>
+                      <a href={msg.file_url} target="_blank" rel="noopener noreferrer" class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></a>
                     </div>
                   {:else}
-                    <div class="bg-gradient-bubble text-on-primary p-4 rounded-2xl rounded-tr-sm shadow-md inline-block">
-                      <p class="font-body-md text-body-md">{msg.content}</p>
+                    <div class="bg-primary text-white p-3 rounded-lg rounded-tr-sm shadow-xs inline-block">
+                      <p class="text-sm">{msg.content}</p>
                     </div>
                   {/if}
-                  <div class="flex justify-end mt-1 items-center gap-1">
-                    <span class="font-label-md text-[10px] text-outline">{formatTime(msg.created_at)}</span>
-                    <span class="material-symbols-outlined text-[14px] text-primary">done_all</span>
+                  <div class="flex justify-end mt-0.5 items-center gap-1">
+                    <span class="text-[10px] text-outline">{formatTime(msg.created_at)}</span>
+                    <span class="material-symbols-outlined text-[12px] text-primary">done_all</span>
                   </div>
                 </div>
               </div>
             {:else}
-              <!-- Client message (left) -->
               <div class="flex justify-start">
-                <div class="flex gap-3 max-w-[70%]">
+                <div class="flex gap-2 max-w-[70%]">
                   {#if selectedClient.client_avatar}
-                    <img alt={selectedClient.client_name} class="w-8 h-8 rounded-full object-cover shrink-0 mt-auto" src={selectedClient.client_avatar} />
+                    <img alt={selectedClient.client_name} class="w-7 h-7 rounded-full object-cover shrink-0 mt-auto" src={selectedClient.client_avatar} />
                   {:else}
-                    <div class="w-8 h-8 rounded-full flex items-center justify-center font-label-md text-label-md bg-secondary-container text-on-secondary-container shrink-0 mt-auto">{initials(selectedClient.client_name)}</div>
+                    <div class="w-7 h-7 rounded-full flex items-center justify-center text-[10px] font-medium bg-secondary/10 text-secondary shrink-0 mt-auto">{initials(selectedClient.client_name)}</div>
                   {/if}
                   <div>
                     {#if msg.file_url}
-                      <div class="bg-surface border border-outline-variant p-3 rounded-2xl rounded-tl-sm shadow-sm flex items-center gap-3 hover:border-primary transition-colors group">
-                        <div class="w-10 h-10 rounded-lg bg-secondary/10 flex items-center justify-center text-secondary"><span class="material-symbols-outlined">description</span></div>
-                        <div class="flex-1 min-w-0"><p class="font-title-md text-sm text-on-surface truncate">{msg.file_name || 'File'}</p></div>
-                        <a href={msg.file_url} target="_blank" rel="noopener noreferrer" class="text-outline hover:text-primary transition-colors focus:outline-none"><span class="material-symbols-outlined">download</span></a>
+                      <div class="bg-white border border-outline-variant p-2.5 rounded-lg rounded-tl-sm shadow-xs flex items-center gap-2.5">
+                        <div class="w-8 h-8 rounded-lg bg-secondary/[0.06] flex items-center justify-center text-secondary"><span class="material-symbols-outlined text-[18px]">description</span></div>
+                        <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name || 'File'}</p>
+                        <a href={msg.file_url} target="_blank" rel="noopener noreferrer" class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></a>
                       </div>
                     {:else}
-                      <div class="bg-surface border border-outline-variant text-on-surface p-4 rounded-2xl rounded-tl-sm shadow-[0_4px_20px_rgba(0,0,0,0.05)] inline-block">
-                        <p class="font-body-md text-body-md">{msg.content}</p>
+                      <div class="bg-white border border-outline-variant text-on-surface p-3 rounded-lg rounded-tl-sm shadow-xs inline-block">
+                        <p class="text-sm">{msg.content}</p>
                       </div>
                     {/if}
-                    <div class="flex justify-start mt-1"><span class="font-label-md text-[10px] text-outline">{formatTime(msg.created_at)}</span></div>
+                    <div class="flex justify-start mt-0.5"><span class="text-[10px] text-outline">{formatTime(msg.created_at)}</span></div>
                   </div>
                 </div>
               </div>
@@ -395,24 +378,24 @@
           {/each}
 
           {#if messages.length === 0}
-            <div class="flex h-full items-center justify-center text-on-surface-variant font-body-md text-body-md italic opacity-70">
+            <div class="flex h-full items-center justify-center text-on-surface-variant">
               <div class="text-center">
-                <span class="material-symbols-outlined text-5xl mb-3 block">chat_bubble_outline</span>
-                <p>No messages yet. Start the conversation!</p>
+                <span class="material-symbols-outlined text-[28px] mb-2 block text-outline">chat_bubble_outline</span>
+                <p class="text-sm">No messages yet. Start the conversation!</p>
               </div>
             </div>
           {/if}
         </div>
 
         <!-- Input Area -->
-        <div class="p-4 border-t border-surface-variant bg-surface shrink-0">
-          <div class="flex items-end gap-3 bg-surface-container-low p-2 rounded-2xl border border-outline-variant focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-all shadow-sm">
+        <div class="p-3 border-t border-outline-variant bg-white shrink-0">
+          <div class="flex items-end gap-2 bg-surface-container-low p-1.5 rounded-lg border border-outline-variant focus-within:border-primary focus-within:ring-1 focus-within:ring-primary transition-colors">
             <input type="file" class="hidden" bind:this={fileInput} onchange={handleFileUpload} />
-            <button class="p-2 text-outline hover:text-primary transition-colors rounded-full hover:bg-surface-variant shrink-0 focus:outline-none" onclick={() => fileInput?.click()} disabled={sending}>
-              <span class="material-symbols-outlined">attach_file</span>
+            <button class="p-1.5 text-outline hover:text-primary transition-colors rounded-lg hover:bg-surface-container shrink-0" onclick={() => fileInput?.click()} disabled={sending}>
+              <span class="material-symbols-outlined text-[20px]">attach_file</span>
             </button>
             <textarea
-              class="w-full bg-transparent border-none focus:ring-0 focus:outline-none resize-none max-h-32 min-h-[44px] py-3 font-body-md text-body-md text-on-surface placeholder:text-outline custom-scrollbar"
+              class="w-full bg-transparent border-none focus:ring-0 focus:outline-none resize-none max-h-28 min-h-[36px] py-2 text-sm text-on-surface placeholder:text-outline"
               oninput={(e) => { const t = e.currentTarget; t.style.height = ''; t.style.height = t.scrollHeight + 'px'; }}
               onkeydown={handleKeydown}
               placeholder="Type a message..."
@@ -421,21 +404,20 @@
               disabled={sending}
             ></textarea>
             <button
-              class="w-11 h-11 bg-primary text-on-primary rounded-full hover:bg-primary-container hover:text-on-primary-container shadow-md flex items-center justify-center shrink-0 transition-all hover:scale-105 active:scale-95 mb-0.5 focus:outline-none disabled:opacity-50"
+              class="w-9 h-9 bg-primary text-white rounded-lg hover:bg-primary-hover flex items-center justify-center shrink-0 transition-colors disabled:opacity-40"
               onclick={sendMessage}
               disabled={sending || !messageText.trim()}
             >
-              <span class="material-symbols-outlined">send</span>
+              <span class="material-symbols-outlined text-[18px]">send</span>
             </button>
           </div>
         </div>
       {:else}
-        <!-- Empty state -->
-        <div class="flex-1 flex items-center justify-center bg-surface-bright">
+        <div class="flex-1 flex items-center justify-center bg-surface-container-low">
           <div class="text-center">
-            <span class="material-symbols-outlined text-7xl text-outline-variant mb-4 block">forum</span>
-            <h2 class="font-headline-md text-headline-md text-on-surface mb-2">Select a Conversation</h2>
-            <p class="font-body-md text-body-md text-on-surface-variant">Choose a client from the list to start messaging</p>
+            <span class="material-symbols-outlined text-[32px] text-outline mb-3 block">forum</span>
+            <h2 class="text-sm font-medium text-on-surface mb-1">Select a Conversation</h2>
+            <p class="text-[13px] text-on-surface-variant">Choose a client from the list to start messaging</p>
           </div>
         </div>
       {/if}

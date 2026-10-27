@@ -3,15 +3,28 @@
   import { authState } from '$lib/auth.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
+  import { jsPDF } from 'jspdf';
 
   const navTabs = ['Dashboard', 'Projects', 'Clients', 'Files', 'Invoices', 'Messages'];
 
   import { agencyDataStore } from '../../stores/agencyData';
   import AgencyHeader from '$lib/components/AgencyHeader.svelte';
+  import { sendBrandedEmail } from '$lib/emailTemplates';
 
-  let activeFilter = $state<'All' | 'Paid' | 'Pending' | 'Overdue'>('All');
+  let activeFilter = $state<'All' | 'Draft' | 'Sent' | 'Paid' | 'Pending' | 'Overdue'>('All');
   let userMenuOpen = $state(false);
   let toastMsg = $state('');
+  let toastType = $state<'success' | 'error'>('success');
+
+  let agencyBranding = $state<{ logo_url: string | null; primary_color: string; email: string; reply_to_email: string | null }>({ logo_url: null, primary_color: '#7C3AED', email: '', reply_to_email: null });
+
+  $effect(() => {
+    if (authState.agencyId) {
+      supabase.from('agencies').select('logo_url, primary_color, email, reply_to_email').eq('id', authState.agencyId).single().then(({ data }) => {
+        if (data) agencyBranding = data as any;
+      });
+    }
+  });
 
   let invoices = $derived.by(() => {
     const clientFilterId = $page.url.searchParams.get('client');
@@ -28,8 +41,10 @@
     activeFilter === 'All' ? invoices : invoices.filter(i => i.status === activeFilter.toLowerCase())
   );
 
+  let draftTotal = $derived(invoices.filter(i => i.status === 'draft').reduce((s, i) => s + Number(i.total || 0), 0));
+  let sentTotal = $derived(invoices.filter(i => i.status === 'sent').reduce((s, i) => s + Number(i.total || 0), 0));
   let paidTotal = $derived(invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total || 0), 0));
-  let pendingTotal = $derived(invoices.filter(i => i.status === 'pending').reduce((s, i) => s + Number(i.total || 0), 0));
+  let pendingTotal = $derived(invoices.filter(i => i.status === 'pending' || i.status === 'sent').reduce((s, i) => s + Number(i.total || 0), 0));
   let overdueTotal = $derived(invoices.filter(i => i.status === 'overdue').reduce((s, i) => s + Number(i.total || 0), 0));
 
   function fmt(n: number) {
@@ -37,12 +52,16 @@
   }
 
   function statusDisplay(s: string) {
+    if (s === 'draft') return 'Draft';
+    if (s === 'sent') return 'Sent';
     if (s === 'paid') return 'Paid';
     if (s === 'pending') return 'Pending';
     return 'Overdue';
   }
 
   function statusBadge(s: string) {
+    if (s === 'draft') return 'bg-surface-variant text-on-surface-variant';
+    if (s === 'sent') return 'bg-[#dbeafe] text-[#1e40af]';
     if (s === 'paid') return 'bg-[#dcfce7] text-[#166534]';
     if (s === 'pending') return 'bg-[#fef3c7] text-[#b45309]';
     return 'bg-error-container text-on-error-container';
@@ -52,9 +71,187 @@
     return name.substring(0, 2).toUpperCase();
   }
 
-  function showToast(msg: string) {
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
     toastMsg = msg;
+    toastType = type;
     setTimeout(() => toastMsg = '', 3000);
+  }
+
+  async function downloadPdf(inv: any) {
+    const { data: items } = await supabase
+      .from('invoice_items')
+      .select('description, quantity, rate, amount')
+      .eq('invoice_id', inv.id);
+
+    const doc = new jsPDF();
+    const agencyName = authState.agencyName || 'ClientDesk';
+
+    doc.setFontSize(20);
+    doc.setFont('helvetica', 'bold');
+    doc.text(agencyName, 20, 25);
+
+    doc.setFontSize(12);
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(100);
+    doc.text('INVOICE', 160, 25);
+
+    doc.setDrawColor(200);
+    doc.line(20, 32, 190, 32);
+
+    doc.setFontSize(10);
+    doc.setTextColor(60);
+    doc.text(`Invoice #: ${inv.invoice_number}`, 20, 42);
+    doc.text(`Status: ${statusDisplay(inv.status)}`, 20, 48);
+    doc.text(`Date: ${inv.issue_date ? new Date(inv.issue_date).toLocaleDateString('en-IN') : '-'}`, 120, 42);
+    doc.text(`Due: ${inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-IN') : '-'}`, 120, 48);
+
+    doc.setFontSize(10);
+    doc.setFont('helvetica', 'bold');
+    doc.text('Bill To:', 20, 60);
+    doc.setFont('helvetica', 'normal');
+    doc.text(inv.clients?.full_name || 'Unknown', 20, 66);
+    if (inv.clients?.company) doc.text(inv.clients.company, 20, 72);
+
+    let y = 85;
+    doc.setFillColor(245, 245, 245);
+    doc.rect(20, y - 5, 170, 8, 'F');
+    doc.setFont('helvetica', 'bold');
+    doc.setTextColor(40);
+    doc.text('Description', 22, y);
+    doc.text('Qty', 110, y);
+    doc.text('Rate', 130, y);
+    doc.text('Amount', 160, y);
+    y += 10;
+
+    doc.setFont('helvetica', 'normal');
+    doc.setTextColor(60);
+    if (items && items.length > 0) {
+      for (const item of items) {
+        doc.text(item.description || '-', 22, y);
+        doc.text(String(item.quantity || 0), 110, y);
+        doc.text(fmt(Number(item.rate || 0)), 130, y);
+        doc.text(fmt(Number(item.amount || 0)), 160, y);
+        y += 8;
+      }
+    }
+
+    y += 5;
+    doc.line(20, y, 190, y);
+    y += 10;
+    doc.setFont('helvetica', 'normal');
+    doc.text('Subtotal:', 130, y);
+    doc.text(fmt(Number(inv.subtotal || 0)), 160, y);
+    y += 7;
+    doc.text(`GST (${inv.gst_rate || 18}%):`, 130, y);
+    doc.text(fmt(Number(inv.gst_amount || 0)), 160, y);
+    y += 7;
+    doc.setFont('helvetica', 'bold');
+    doc.setFontSize(12);
+    doc.setTextColor(20);
+    doc.text('Total:', 130, y);
+    doc.text(fmt(Number(inv.total || 0)), 160, y);
+
+    doc.save(`${inv.invoice_number}.pdf`);
+    showToast(`Downloaded ${inv.invoice_number}.pdf`);
+  }
+
+  async function sendReminder(inv: any) {
+    if (!inv.client_id) {
+      showToast('No client linked to this invoice.', 'error');
+      return;
+    }
+    const { data: clientUsers } = await supabase
+      .from('client_users')
+      .select('id')
+      .eq('client_id', inv.client_id)
+      .limit(1);
+
+    if (clientUsers && clientUsers.length > 0) {
+      await supabase.from('notifications').insert({
+        user_id: clientUsers[0].id,
+        title: `Payment reminder for ${inv.invoice_number}`,
+        body: `Amount due: ${fmt(Number(inv.total || 0))}`,
+        type: 'invoice',
+      });
+    }
+
+    await supabase.from('invoices').update({ reminded_at: new Date().toISOString() }).eq('id', inv.id);
+
+    if (inv.clients?.email && authState.agencyId) {
+      const dueStr = inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
+      sendBrandedEmail({
+        to: inv.clients.email,
+        subject: `Reminder: Invoice ${inv.invoice_number} — ${fmt(Number(inv.total || 0))} due ${dueStr}`,
+        body_html: `<p>Hi ${inv.clients.full_name || 'there'},</p>
+          <p>This is a friendly reminder that invoice <strong>${inv.invoice_number}</strong> for <strong>${fmt(Number(inv.total || 0))}</strong> is due on <strong>${dueStr}</strong>.</p>
+          <p>Please log in to your portal to complete the payment.</p>`,
+        cta_text: 'Pay Now',
+        cta_url: `${window.location.origin}/client/invoices`,
+        agency_id: authState.agencyId,
+        agency_name: authState.agencyName || 'ClientDesk',
+        agency_logo_url: agencyBranding.logo_url,
+        agency_primary_color: agencyBranding.primary_color,
+        reply_to: agencyBranding.reply_to_email || agencyBranding.email || undefined,
+      });
+    }
+
+    showToast(`Reminder sent to ${inv.clients?.full_name || 'client'}`);
+  }
+
+  async function sendToClient(inv: any) {
+    if (inv.status !== 'draft') {
+      showToast('Invoice already sent.', 'error');
+      return;
+    }
+    await supabase.from('invoices').update({ status: 'sent' }).eq('id', inv.id);
+    agencyDataStore.update(s => ({
+      ...s,
+      invoices: s.invoices.map(i => i.id === inv.id ? { ...i, status: 'sent' } : i),
+    }));
+
+    if (inv.client_id) {
+      const { data: clientUsers } = await supabase
+        .from('client_users')
+        .select('id')
+        .eq('client_id', inv.client_id)
+        .limit(1);
+      if (clientUsers && clientUsers.length > 0) {
+        await supabase.from('notifications').insert({
+          user_id: clientUsers[0].id,
+          title: `New invoice ${inv.invoice_number}`,
+          body: `Amount: ${fmt(Number(inv.total || 0))}`,
+          type: 'invoice',
+        });
+      }
+    }
+
+    // Fetch line items for email
+    if (inv.clients?.email && authState.agencyId) {
+      const { data: items } = await supabase.from('invoice_items').select('description, quantity, amount').eq('invoice_id', inv.id);
+      const itemsHtml = (items || []).map(i => `<li>${i.description} (x${i.quantity}) — ${fmt(Number(i.amount || 0))}</li>`).join('');
+      const dueStr = inv.due_date ? new Date(inv.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
+      sendBrandedEmail({
+        to: inv.clients.email,
+        subject: `Invoice ${inv.invoice_number} — ${fmt(Number(inv.total || 0))}`,
+        body_html: `<p>Hi ${inv.clients.full_name || 'there'},</p>
+          <p>You have a new invoice from <strong>${authState.agencyName || 'us'}</strong>.</p>
+          <table style="width:100%;border-collapse:collapse;margin:16px 0;">
+            <tr><td style="padding:4px 0;color:#6b7280;">Invoice</td><td style="padding:4px 0;font-weight:600;">${inv.invoice_number}</td></tr>
+            <tr><td style="padding:4px 0;color:#6b7280;">Amount</td><td style="padding:4px 0;font-weight:600;">${fmt(Number(inv.total || 0))}</td></tr>
+            <tr><td style="padding:4px 0;color:#6b7280;">Due Date</td><td style="padding:4px 0;font-weight:600;">${dueStr}</td></tr>
+          </table>
+          ${itemsHtml ? `<p style="font-weight:600;margin-bottom:4px;">Items:</p><ul style="padding-left:20px;margin:0 0 16px;">${itemsHtml}</ul>` : ''}`,
+        cta_text: 'View & Pay Invoice',
+        cta_url: `${window.location.origin}/client/invoices`,
+        agency_id: authState.agencyId,
+        agency_name: authState.agencyName || 'ClientDesk',
+        agency_logo_url: agencyBranding.logo_url,
+        agency_primary_color: agencyBranding.primary_color,
+        reply_to: agencyBranding.reply_to_email || agencyBranding.email || undefined,
+      });
+    }
+
+    showToast(`Invoice ${inv.invoice_number} sent to client`);
   }
 
   function tabHref(tab: string) {
@@ -82,129 +279,153 @@
   <AgencyHeader activeTab="Invoices" />
 
   <!-- Main -->
-  <main class="flex-1 overflow-y-auto mt-16 px-margin-desktop py-8 max-w-container-max mx-auto w-full">
-    <!-- Hero -->
-    <section class="rounded-xl overflow-hidden shadow-lg mb-stack-md bg-gradient-to-br from-primary to-secondary p-8 md:p-12 relative flex flex-col md:flex-row items-center justify-between gap-6 group hover:-translate-y-1 transition-transform duration-300">
-      <div class="absolute inset-0 bg-white/5 opacity-50 pointer-events-none" />
-      <div class="relative z-10 flex-1 w-full text-center md:text-left">
-        <h1 class="font-display-lg text-display-lg text-white mb-2">Invoices</h1>
-        <p class="font-body-lg text-body-lg text-white/90">Track payments and manage billing</p>
-        <div class="mt-6 inline-flex items-end gap-3 bg-white/10 backdrop-blur-md px-6 py-4 rounded-lg border border-white/20">
-          <span class="font-display-lg text-display-lg text-white leading-none">{fmt(paidTotal)}</span>
-          <span class="font-label-md text-label-md text-white/80 uppercase tracking-wider pb-1">Total Revenue</span>
-        </div>
+  <main class="flex-1 overflow-y-auto mt-14 px-6 py-6 max-w-container-max mx-auto w-full">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 animate-fadeIn">
+      <div>
+        <h1 class="text-xl font-semibold text-on-surface mb-1">Invoices</h1>
+        <p class="text-sm text-on-surface-variant">Total revenue: {fmt(paidTotal)}</p>
       </div>
-      <div class="relative z-10 w-full md:w-auto mt-6 md:mt-0 flex justify-center md:justify-end">
-        <a href="/invoices/create" class="bg-[#10b981] hover:bg-[#059669] text-white font-title-md text-title-md px-8 py-4 rounded-lg shadow-md transition-all duration-200 active:scale-95 flex items-center gap-2 w-full md:w-auto justify-center no-underline">
-          <span class="material-symbols-outlined">add</span> Create Invoice
-        </a>
-      </div>
-    </section>
+      <a href="/invoices/create" class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 w-fit no-underline">
+        <span class="material-symbols-outlined text-[18px]">add</span> Create Invoice
+      </a>
+    </div>
 
-    <!-- Stat Cards -->
-    <section class="grid grid-cols-1 sm:grid-cols-3 gap-4 mb-stack-md">
-      <div class="bg-surface border border-[#bbf7d0] rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-3 mb-3">
-          <div class="w-10 h-10 rounded-full bg-[#dcfce7] flex items-center justify-center">
-            <span class="material-symbols-outlined text-[#166534]" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+    <div class="grid grid-cols-3 gap-3 mb-5">
+      <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-7 h-7 rounded-lg bg-success/[0.08] flex items-center justify-center">
+            <span class="material-symbols-outlined text-success text-[16px]">check_circle</span>
           </div>
-          <span class="font-label-md text-label-md text-[#166534] uppercase tracking-wider">Paid</span>
+          <span class="text-xs text-on-surface-variant">Paid</span>
         </div>
-        <p class="font-headline-md text-headline-md text-on-surface font-bold">{fmt(paidTotal)}</p>
-        <p class="font-body-md text-body-md text-on-surface-variant mt-1">{invoices.filter(i => i.status === 'paid').length} invoices</p>
+        <p class="text-[15px] font-semibold text-on-surface">{fmt(paidTotal)}</p>
+        <p class="text-xs text-on-surface-variant mt-0.5">{invoices.filter(i => i.status === 'paid').length} invoices</p>
       </div>
-      <div class="bg-surface border border-[#fed7aa] rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-3 mb-3">
-          <div class="w-10 h-10 rounded-full bg-[#fef3c7] flex items-center justify-center">
-            <span class="material-symbols-outlined text-[#b45309]" style="font-variation-settings: 'FILL' 1;">schedule</span>
+      <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-7 h-7 rounded-lg bg-tertiary/[0.08] flex items-center justify-center">
+            <span class="material-symbols-outlined text-tertiary text-[16px]">schedule</span>
           </div>
-          <span class="font-label-md text-label-md text-[#b45309] uppercase tracking-wider">Pending</span>
+          <span class="text-xs text-on-surface-variant">Pending</span>
         </div>
-        <p class="font-headline-md text-headline-md text-on-surface font-bold">{fmt(pendingTotal)}</p>
-        <p class="font-body-md text-body-md text-on-surface-variant mt-1">{invoices.filter(i => i.status === 'pending').length} invoices</p>
+        <p class="text-[15px] font-semibold text-on-surface">{fmt(pendingTotal)}</p>
+        <p class="text-xs text-on-surface-variant mt-0.5">{invoices.filter(i => i.status === 'pending').length} invoices</p>
       </div>
-      <div class="bg-surface border border-error/30 rounded-xl p-6 shadow-sm">
-        <div class="flex items-center gap-3 mb-3">
-          <div class="w-10 h-10 rounded-full bg-error-container flex items-center justify-center">
-            <span class="material-symbols-outlined text-error" style="font-variation-settings: 'FILL' 1;">warning</span>
+      <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+        <div class="flex items-center gap-2 mb-2">
+          <div class="w-7 h-7 rounded-lg bg-error/[0.08] flex items-center justify-center">
+            <span class="material-symbols-outlined text-error text-[16px]">warning</span>
           </div>
-          <span class="font-label-md text-label-md text-error uppercase tracking-wider">Overdue</span>
+          <span class="text-xs text-on-surface-variant">Overdue</span>
         </div>
-        <p class="font-headline-md text-headline-md text-on-surface font-bold">{fmt(overdueTotal)}</p>
-        <p class="font-body-md text-body-md text-on-surface-variant mt-1">{invoices.filter(i => i.status === 'overdue').length} invoices</p>
+        <p class="text-[15px] font-semibold text-on-surface">{fmt(overdueTotal)}</p>
+        <p class="text-xs text-on-surface-variant mt-0.5">{invoices.filter(i => i.status === 'overdue').length} invoices</p>
       </div>
-    </section>
+    </div>
 
-    <!-- Filters -->
-    <section class="flex gap-2 overflow-x-auto pb-2 mb-stack-md scrollbar-hide">
-      {#each ['All', 'Paid', 'Pending', 'Overdue'] as f}
+    <div class="flex gap-1.5 overflow-x-auto pb-1 mb-5">
+      {#each ['All', 'Draft', 'Sent', 'Paid', 'Pending', 'Overdue'] as f}
         <button
           onclick={() => activeFilter = f as any}
-          class="px-5 py-2.5 rounded-full font-label-md text-label-md whitespace-nowrap transition-all duration-150 focus:outline-none {activeFilter === f ? 'bg-primary text-white shadow-sm' : 'bg-surface hover:bg-surface-variant text-on-surface-variant border border-outline-variant/30'}"
+          class="px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors {activeFilter === f ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
         >{f}</button>
       {/each}
-    </section>
+    </div>
 
     <!-- Invoice Grid -->
     {#if loading}
-      <div class="py-20 flex justify-center"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>
+      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3">
+        {#each Array(6) as _}
+          <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+            <div class="flex justify-between mb-3">
+              <div class="h-3 animate-shimmer rounded w-16"></div>
+              <div class="h-4 animate-shimmer rounded w-14"></div>
+            </div>
+            <div class="flex items-center gap-2.5 mb-4">
+              <div class="w-8 h-8 rounded-full animate-shimmer"></div>
+              <div class="flex-1">
+                <div class="h-3.5 animate-shimmer rounded w-2/3 mb-1"></div>
+                <div class="h-3 animate-shimmer rounded w-1/3"></div>
+              </div>
+            </div>
+            <div class="h-5 animate-shimmer rounded w-1/2 mb-1.5"></div>
+            <div class="h-3 animate-shimmer rounded w-1/3 mb-4"></div>
+            <div class="flex gap-2">
+              <div class="flex-1 h-8 animate-shimmer rounded"></div>
+              <div class="flex-1 h-8 animate-shimmer rounded"></div>
+            </div>
+          </div>
+        {/each}
+      </section>
     {:else if filteredInvoices.length === 0}
-      <div class="py-20 text-center bg-surface border border-outline-variant/30 rounded-xl">
-        <span class="material-symbols-outlined text-5xl text-outline-variant mb-4">receipt_long</span>
-        <h3 class="font-title-md text-title-md text-on-surface font-semibold mb-1">No invoices found</h3>
-        <p class="font-body-md text-body-md text-on-surface-variant">
-          {#if activeFilter !== 'All'}Try a different filter.{:else}Create your first invoice to get started!{/if}
+      <div class="py-16 text-center border border-dashed border-outline-variant rounded-lg">
+        <span class="material-symbols-outlined text-[28px] text-outline mb-2 block">receipt_long</span>
+        <h3 class="text-sm font-medium text-on-surface mb-1">No invoices found</h3>
+        <p class="text-[13px] text-on-surface-variant">
+          {#if activeFilter !== 'All'}Try a different filter.{:else}Create your first invoice to get started.{/if}
         </p>
       </div>
     {:else}
-      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-gutter mb-12">
+      <section class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-3 mb-8">
         {#each filteredInvoices as inv (inv.id)}
-          <div class="bg-surface rounded-[16px] p-6 shadow-[0_4px_20px_rgba(0,0,0,0.05)] hover:shadow-[0_10px_25px_rgba(0,0,0,0.08)] transition-all duration-300 flex flex-col border border-surface-variant">
-            <!-- Header -->
-            <div class="flex justify-between items-start mb-4">
-              <span class="font-label-md text-label-md text-outline">{inv.invoice_number}</span>
-              <span class="{statusBadge(inv.status)} px-2 py-1 rounded font-label-md text-label-md">{statusDisplay(inv.status)}</span>
+          <div class="bg-white rounded-lg p-4 shadow-xs hover:shadow-sm transition-shadow flex flex-col border border-outline-variant">
+            <div class="flex justify-between items-start mb-3">
+              <span class="text-xs text-outline">{inv.invoice_number}</span>
+              <span class="{statusBadge(inv.status)} px-1.5 py-0.5 rounded text-[11px] font-medium">{statusDisplay(inv.status)}</span>
             </div>
 
-            <!-- Client -->
-            <div class="flex items-center gap-3 mb-6">
+            <div class="flex items-center gap-2.5 mb-4">
               {#if inv.clients?.avatar_url}
-                <img alt="Client" class="w-10 h-10 rounded-full bg-surface-variant object-cover" src={inv.clients.avatar_url} />
+                <img alt="Client" class="w-8 h-8 rounded-full object-cover" src={inv.clients.avatar_url} />
               {:else}
-                <div class="w-10 h-10 rounded-full bg-primary-container text-on-primary-container flex items-center justify-center font-title-md text-title-md">
+                <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">
                   {initials(inv.clients?.full_name || 'NA')}
                 </div>
               {/if}
               <div>
-                <div class="font-title-md text-title-md text-on-surface">{inv.clients?.full_name || 'Unknown'}</div>
+                <div class="text-sm font-medium text-on-surface">{inv.clients?.full_name || 'Unknown'}</div>
                 {#if inv.clients?.company}
-                  <div class="font-body-md text-[12px] text-on-surface-variant">{inv.clients.company}</div>
+                  <div class="text-xs text-on-surface-variant">{inv.clients.company}</div>
                 {/if}
               </div>
             </div>
 
-            <!-- Amount -->
-            <div class="mb-6 flex-grow">
-              <div class="font-headline-md text-headline-md text-on-surface font-bold">{fmt(Number(inv.total || 0))}</div>
-              <div class="font-body-md text-body-md text-outline">
+            <div class="mb-4 flex-grow">
+              <div class="text-lg font-semibold text-on-surface">{fmt(Number(inv.total || 0))}</div>
+              <div class="text-xs text-outline">
                 {#if inv.due_date}Due {new Date(inv.due_date).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' })}{:else}No due date{/if}
               </div>
             </div>
 
-            <!-- Actions -->
-            <div class="flex gap-2 mt-auto">
+            {#if inv.status === 'paid' && inv.paid_at}
+              <div class="mb-2 flex items-center gap-1 text-success">
+                <span class="material-symbols-outlined text-[14px]">check_circle</span>
+                <span class="text-xs">Paid {new Date(inv.paid_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })}</span>
+              </div>
+            {/if}
+
+            <div class="flex gap-2 mt-auto pt-3 border-t border-outline-variant">
               <button
-                class="flex-1 bg-primary-container hover:bg-primary/20 text-primary px-3 py-2 rounded font-label-md text-label-md transition-colors flex items-center justify-center gap-1 focus:outline-none"
-                onclick={() => showToast(`Downloading PDF for ${inv.invoice_number}...`)}
+                class="flex-1 bg-primary/[0.06] hover:bg-primary/[0.1] text-primary px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                onclick={() => downloadPdf(inv)}
               >
-                <span class="material-symbols-outlined text-sm">download</span> PDF
+                <span class="material-symbols-outlined text-[14px]">download</span> PDF
               </button>
-              <button
-                class="flex-1 bg-surface-variant hover:bg-surface-dim text-on-surface-variant px-3 py-2 rounded font-label-md text-label-md transition-colors flex items-center justify-center gap-1 focus:outline-none"
-                onclick={() => showToast(`Reminder sent to ${inv.clients?.full_name || 'client'}!`)}
-              >
-                <span class="material-symbols-outlined text-sm">send</span> Remind
-              </button>
+              {#if inv.status === 'draft'}
+                <button
+                  class="flex-1 bg-primary hover:bg-primary-hover text-white px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                  onclick={() => sendToClient(inv)}
+                >
+                  <span class="material-symbols-outlined text-[14px]">send</span> Send
+                </button>
+              {:else if inv.status !== 'paid'}
+                <button
+                  class="flex-1 bg-surface-container hover:bg-surface-container-high text-on-surface-variant px-2.5 py-1.5 rounded-lg text-xs font-medium transition-colors flex items-center justify-center gap-1"
+                  onclick={() => sendReminder(inv)}
+                >
+                  <span class="material-symbols-outlined text-[14px]">notifications</span> Remind
+                </button>
+              {/if}
             </div>
           </div>
         {/each}
@@ -213,20 +434,9 @@
   </main>
 </div>
 
-<!-- Toast -->
 {#if toastMsg}
-  <div class="fixed bottom-6 right-6 z-50 bg-on-surface text-surface px-5 py-3 rounded-lg shadow-lg font-body-md text-body-md flex items-center gap-2 animate-fade-in">
-    <span class="material-symbols-outlined text-sm">check_circle</span>
+  <div class="fixed bottom-5 right-5 z-50 px-4 py-2.5 rounded-lg shadow-md text-sm flex items-center gap-2 animate-fadeIn {toastType === 'error' ? 'bg-white border border-error/20 text-on-surface' : 'bg-on-surface text-surface'}">
+    <span class="material-symbols-outlined text-[18px] {toastType === 'error' ? 'text-error' : ''}">{toastType === 'error' ? 'error' : 'check_circle'}</span>
     {toastMsg}
   </div>
 {/if}
-
-<style>
-  @keyframes fade-in {
-    from { opacity: 0; transform: translateY(10px); }
-    to { opacity: 1; transform: translateY(0); }
-  }
-  .animate-fade-in {
-    animation: fade-in 0.3s ease-out;
-  }
-</style>

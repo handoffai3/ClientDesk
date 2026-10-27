@@ -3,10 +3,11 @@
   import { authState } from '$lib/auth.svelte';
   import { goto } from '$app/navigation';
   import AgencyHeader from '$lib/components/AgencyHeader.svelte';
+  import SettingsPanels from '$lib/components/Settings.svelte';
 
   const navTabs = ['Dashboard', 'Projects', 'Clients', 'Files', 'Invoices', 'Messages'];
   
-  let activeTab = $state<'Branding' | 'Account' | 'Notifications' | 'Team'>('Branding');
+  let activeTab = $state<'Branding' | 'Account' | 'Notifications' | 'Team' | 'Payments' | 'Email'>('Branding');
   let userMenuOpen = $state(false);
   let loading = $state(true);
 
@@ -144,26 +145,64 @@
     savingNotifications = false;
   }
 
+  let accFullName = $state(authState.userFullName || '');
+  let savingAccount = $state(false);
+  let accountMsg = $state('');
+  let accountMsgError = $state(false);
+  let newPassword = $state('');
+  let confirmPassword = $state('');
+  let savingPassword = $state(false);
+  let passwordMsg = $state('');
+  let passwordMsgError = $state(false);
+
+  $effect(() => { if (authState.userFullName && !accFullName) accFullName = authState.userFullName; });
+
+  async function saveAccount() {
+    if (!authState.user) return;
+    if (!accFullName.trim()) { accountMsg = 'Name cannot be empty.'; accountMsgError = true; return; }
+    savingAccount = true;
+    const { error } = await supabase.from('users').update({ full_name: accFullName.trim() }).eq('id', authState.user.id);
+    savingAccount = false;
+    accountMsgError = !!error;
+    accountMsg = error ? 'Save failed: ' + error.message : 'Account updated.';
+    if (!error) {
+      authState.userFullName = accFullName.trim();
+      teamMembers = teamMembers.map(m => m.id === authState.user?.id ? { ...m, full_name: accFullName.trim() } : m);
+    }
+  }
+
+  async function changePassword() {
+    passwordMsgError = true;
+    if (newPassword.length < 8) { passwordMsg = 'Password must be at least 8 characters.'; return; }
+    if (newPassword !== confirmPassword) { passwordMsg = 'Passwords do not match.'; return; }
+    savingPassword = true;
+    const { error } = await supabase.auth.updateUser({ password: newPassword });
+    savingPassword = false;
+    if (error) { passwordMsg = error.message; return; }
+    newPassword = ''; confirmPassword = '';
+    passwordMsgError = false;
+    passwordMsg = 'Password changed.';
+  }
+
   async function inviteMember() {
     if (!inviteEmail) return;
     inviteError = '';
     inviteSuccess = '';
 
-    // The prompt requested to use supabase.auth.admin.inviteUserByEmail()
-    // Note: This requires the SERVICE_ROLE key, so it will fail with anon key.
-    // Assuming the user has a modified supabaseClient with admin privileges or a workaround if they specifically requested it.
     try {
-      const { data, error } = await (supabase.auth as any).admin?.inviteUserByEmail(inviteEmail, {
-        data: { agency_id: agencyId, role: 'member' }
+      const res = await fetch('/api/team/invite', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${authState.session?.access_token || ''}` },
+        body: JSON.stringify({ email: inviteEmail })
       });
-
-      if (error) throw error;
-      
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) throw new Error(json.message || json.error || 'Could not send invitation.');
       inviteSuccess = 'Invitation sent to ' + inviteEmail;
+      if (json.member) teamMembers = [...teamMembers, json.member];
       inviteEmail = '';
-      setTimeout(() => showInviteModal = false, 2000);
+      setTimeout(() => { showInviteModal = false; inviteSuccess = ''; }, 2000);
     } catch (e: any) {
-      inviteError = e.message || 'Error sending invite (Admin API may not be accessible from client).';
+      inviteError = e.message || 'Could not send invitation.';
     }
   }
 
@@ -216,7 +255,7 @@
 
     <!-- Tab Pills -->
     <div class="flex space-x-2 overflow-x-auto pb-2 mb-8">
-      {#each ['Branding', 'Account', 'Notifications', 'Team'] as tab}
+      {#each ['Branding', 'Account', 'Notifications', 'Team', 'Payments', 'Email'] as tab}
         <button
           class="px-5 py-2.5 rounded-full font-label-md text-label-md whitespace-nowrap transition-all duration-150 focus:outline-none {activeTab === tab ? 'bg-primary text-white shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/30'}"
           onclick={() => activeTab = tab as any}
@@ -393,14 +432,44 @@
         </div>
 
       {:else if activeTab === 'Account'}
-        <div class="bg-surface rounded-2xl p-8 shadow-sm border border-outline-variant/20 max-w-2xl">
-          <h2 class="font-headline-sm text-headline-sm text-on-surface mb-6">Account Settings</h2>
-          <p class="text-on-surface-variant mb-4">Account preferences and billing details will appear here.</p>
-          <div class="bg-surface-container p-6 rounded-lg text-center border border-outline-variant/30">
-            <span class="material-symbols-outlined text-4xl text-outline mb-2 block">construction</span>
-            <p>This section is under construction.</p>
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-6 max-w-4xl">
+          <div class="bg-surface rounded-2xl p-6 shadow-sm border border-outline-variant/20 space-y-4">
+            <h2 class="font-title-md text-title-md text-on-surface">Profile</h2>
+            <div>
+              <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="acc-name">Full name</label>
+              <input id="acc-name" bind:value={accFullName} class="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm text-on-surface" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="acc-email">Email</label>
+              <input id="acc-email" value={authState.user?.email || ''} disabled class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface-variant" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="acc-agency">Agency</label>
+              <input id="acc-agency" value={authState.agencyName || ''} disabled class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface-variant" />
+            </div>
+            {#if accountMsg}<p class="text-xs {accountMsgError ? 'text-error' : 'text-[#10b981]'}" role="status">{accountMsg}</p>{/if}
+            <div class="flex justify-end pt-3 border-t border-outline-variant/30">
+              <button onclick={saveAccount} disabled={savingAccount} class="px-5 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover disabled:opacity-50">{savingAccount ? 'Saving...' : 'Save Changes'}</button>
+            </div>
+          </div>
+          <div class="bg-surface rounded-2xl p-6 shadow-sm border border-outline-variant/20 space-y-4">
+            <h2 class="font-title-md text-title-md text-on-surface">Change password</h2>
+            <div>
+              <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="acc-pw">New password</label>
+              <input id="acc-pw" type="password" autocomplete="new-password" bind:value={newPassword} placeholder="At least 8 characters" class="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm text-on-surface" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="acc-pw2">Confirm new password</label>
+              <input id="acc-pw2" type="password" autocomplete="new-password" bind:value={confirmPassword} class="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary text-sm text-on-surface" />
+            </div>
+            {#if passwordMsg}<p class="text-xs {passwordMsgError ? 'text-error' : 'text-[#10b981]'}" role="status">{passwordMsg}</p>{/if}
+            <div class="flex justify-end pt-3 border-t border-outline-variant/30">
+              <button onclick={changePassword} disabled={savingPassword || !newPassword} class="px-5 py-2 bg-primary text-white rounded-lg text-sm font-semibold hover:bg-primary-hover disabled:opacity-50">{savingPassword ? 'Updating...' : 'Update Password'}</button>
+            </div>
           </div>
         </div>
+      {:else if activeTab === 'Payments' || activeTab === 'Email'}
+        <SettingsPanels initialTab={activeTab} hideTabs />
       {/if}
     {/if}
   </main>

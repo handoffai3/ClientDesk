@@ -5,6 +5,7 @@
 	import { page } from '$app/stores';
 	import { goto } from '$app/navigation';
 	import { initAuth, authState } from '$lib/auth.svelte';
+	import { initTheme } from '$lib/theme.svelte';
 	import { clientStore } from '$lib/clientStore';
 	import { get } from 'svelte/store';
 	import { agencyDataStore } from '../stores/agencyData';
@@ -14,14 +15,16 @@
 	let { children } = $props();
 
 	onMount(() => {
+		initTheme();
 		initAuth();
 	});
 
 	$effect(() => {
 		if (!authState.loading) {
 			const path = $page.url.pathname;
+			if (path === '/client/auth/callback') return;
 			const isAuthRoute = path === '/login' || path === '/signup' || path === '/client/login';
-			const isPortalRoute = path.startsWith('/client/') || path === '/client';
+			const isPortalRoute = path.startsWith('/client/') || (path as string) === '/client';
 			const clientData = get(clientStore);
 			
 			if (!authState.user && !isAuthRoute) {
@@ -54,10 +57,15 @@
 		const [clientsRes, projectsRes, invoicesRes, tasksRes, messagesRes] = await Promise.all([
 			supabase.from('clients').select('*').eq('agency_id', agencyId).order('created_at', { ascending: false }),
 			supabase.from('projects').select('*, clients(full_name, avatar_url, company)').eq('agency_id', agencyId).order('created_at', { ascending: false }),
-			supabase.from('invoices').select('*, clients(full_name, avatar_url)').eq('agency_id', agencyId).order('created_at', { ascending: false }),
+			supabase.from('invoices').select('*, clients(full_name, avatar_url, email, company)').eq('agency_id', agencyId).order('created_at', { ascending: false }),
 			supabase.from('tasks').select('*').eq('agency_id', agencyId).order('created_at', { ascending: false }),
 			supabase.from('messages').select('id, client_id, content, file_name, sender_type, is_read, created_at, clients(full_name, avatar_url, company)').eq('agency_id', agencyId).order('created_at', { ascending: true })
 		]);
+
+		const fetchErr = [clientsRes, projectsRes, invoicesRes, tasksRes, messagesRes].find(r => r.error);
+		if (fetchErr?.error) {
+			showGlobalError('Failed to load data: ' + fetchErr.error.message);
+		}
 
 		const projects = projectsRes.data || [];
 		const projectIds = projects.map(p => p.id);
@@ -88,6 +96,13 @@
 		});
 	}
 
+	let globalError = $state('');
+
+	function showGlobalError(msg: string) {
+		globalError = msg;
+		setTimeout(() => globalError = '', 5000);
+	}
+
 	let isReloading = $state(false);
 
 	async function globalReload() {
@@ -116,8 +131,11 @@
 </svelte:head>
 
 {#if authState.loading}
-	<div class="min-h-screen flex items-center justify-center bg-surface-container-low">
-		<div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+	<div class="min-h-screen flex items-center justify-center bg-background">
+		<div class="flex flex-col items-center gap-3">
+			<div class="w-8 h-8 border-2 border-primary/30 border-t-primary rounded-full animate-spin"></div>
+			<span class="text-sm text-on-surface-variant">Loading...</span>
+		</div>
 	</div>
 {:else}
 	{@render children()}
@@ -126,8 +144,18 @@
 <button
 	onclick={globalReload}
 	disabled={isReloading}
-	class="fixed bottom-6 right-6 z-[9999] w-14 h-14 bg-[#630ed4] hover:bg-[#520bb3] text-white rounded-full shadow-lg flex items-center justify-center transition-transform hover:scale-105 active:scale-95 disabled:opacity-50"
+	class="fixed bottom-5 right-5 z-[9999] w-10 h-10 bg-white text-on-surface-variant hover:text-primary border border-outline-variant rounded-lg shadow-sm flex items-center justify-center transition-colors disabled:opacity-40"
 	title="Reload all data"
 >
-	<span class="material-symbols-outlined text-2xl {isReloading ? 'animate-spin' : ''}">refresh</span>
+	<span class="material-symbols-outlined text-[20px] {isReloading ? 'animate-spin' : ''}">refresh</span>
 </button>
+
+{#if globalError}
+	<div class="fixed top-4 left-1/2 -translate-x-1/2 z-[10000] bg-white border border-error/20 text-on-surface px-5 py-3 rounded-lg shadow-md flex items-center gap-3 text-sm max-w-md animate-fadeIn">
+		<span class="material-symbols-outlined text-error text-[20px]">error</span>
+		<span class="flex-1">{globalError}</span>
+		<button class="text-on-surface-variant hover:text-on-surface p-0.5" onclick={() => globalError = ''}>
+			<span class="material-symbols-outlined text-[18px]">close</span>
+		</button>
+	</div>
+{/if}

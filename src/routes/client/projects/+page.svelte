@@ -1,4 +1,5 @@
 <script lang="ts">
+  import NotificationBell from '$lib/components/NotificationBell.svelte';
   import { supabase } from '$lib/supabaseClient';
   import { clientStore } from '$lib/clientStore';
   import { authState } from '$lib/auth.svelte';
@@ -85,6 +86,7 @@
         </nav>
       </div>
       <div class="flex items-center gap-4">
+        <NotificationBell />
         <div class="relative">
           <button class="flex items-center active:scale-95 transition-transform duration-150 focus:outline-none bg-primary-container text-on-primary-container w-8 h-8 rounded-full border border-outline-variant justify-center font-bold text-xs" onclick={() => userMenuOpen = !userMenuOpen}>
             {initials($clientStore.full_name)}

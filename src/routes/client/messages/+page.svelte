@@ -1,4 +1,6 @@
 <script lang="ts">
+  import NotificationBell from '$lib/components/NotificationBell.svelte';
+  import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { clientStore } from '$lib/clientStore';
   import { authState } from '$lib/auth.svelte';
@@ -136,6 +138,41 @@
 
   function initials(name: string | null) { return name?.substring(0, 2).toUpperCase() || 'NA'; }
 
+  // AI Summary
+  let aiSummary = $state('');
+  let aiSummarizing = $state(false);
+  let showSummary = $state(false);
+
+  async function summarizeThread() {
+    if (messages.length === 0) return;
+    aiSummarizing = true;
+    aiSummary = '';
+    showSummary = true;
+    try {
+      const res = await apiFetch('/api/ai/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'messages',
+          data: {
+            messages: messages.map(m => ({
+              sender_type: m.sender_type,
+              content: m.content,
+              file_name: m.file_name
+            }))
+          }
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Summarization failed');
+      aiSummary = json.summary;
+    } catch (err: any) {
+      aiSummary = `Error: ${err.message}`;
+    } finally {
+      aiSummarizing = false;
+    }
+  }
+
   async function handleSignOut() {
     userMenuOpen = false;
     await supabase.auth.signOut();
@@ -166,6 +203,7 @@
         </nav>
       </div>
       <div class="flex items-center gap-4">
+        <NotificationBell />
         <div class="relative">
           <button class="flex items-center active:scale-95 transition-transform duration-150 focus:outline-none bg-primary-container text-on-primary-container w-8 h-8 rounded-full border border-outline-variant justify-center font-bold text-xs" onclick={() => userMenuOpen = !userMenuOpen}>
             {initials($clientStore.full_name)}
@@ -257,7 +295,39 @@
               <p class="text-[11px] text-on-surface-variant">We usually reply within a few hours.</p>
             </div>
           </div>
+          <div class="flex items-center gap-2">
+            <button
+              onclick={summarizeThread}
+              disabled={aiSummarizing || messages.length === 0}
+              class="w-9 h-9 rounded-full hover:bg-tertiary-container flex items-center justify-center text-tertiary transition-colors focus:outline-none disabled:opacity-50"
+              title="AI Summarize"
+            >
+              <span class="material-symbols-outlined text-[20px] {aiSummarizing ? 'animate-spin' : ''}">auto_awesome</span>
+            </button>
+          </div>
         </div>
+
+        <!-- AI Summary Panel -->
+        {#if showSummary}
+          <div class="border-b border-outline-variant/20 bg-tertiary-container/30 px-6 py-3 shrink-0">
+            <div class="flex items-start justify-between gap-3">
+              <div class="flex items-start gap-2 flex-1 min-w-0">
+                <span class="material-symbols-outlined text-tertiary shrink-0 mt-0.5">auto_awesome</span>
+                <div class="flex-1 min-w-0">
+                  <p class="text-[11px] font-bold text-tertiary mb-1">AI Summary</p>
+                  {#if aiSummarizing}
+                    <p class="text-xs text-on-surface-variant">Generating summary...</p>
+                  {:else}
+                    <p class="text-xs text-on-surface whitespace-pre-wrap leading-relaxed">{aiSummary}</p>
+                  {/if}
+                </div>
+              </div>
+              <button onclick={() => { showSummary = false; }} class="text-on-surface-variant hover:text-on-surface shrink-0 focus:outline-none">
+                <span class="material-symbols-outlined text-[16px]">close</span>
+              </button>
+            </div>
+          </div>
+        {/if}
 
         <!-- Messages Area -->
         <div class="flex-1 overflow-y-auto p-6 space-y-6">

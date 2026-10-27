@@ -1,10 +1,13 @@
 <script lang="ts">
+  import NotificationBell from '$lib/components/NotificationBell.svelte';
+  import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { clientStore } from '$lib/clientStore';
   import { authState } from '$lib/auth.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
   import { onMount } from 'svelte';
+  import ProofingCanvas from '$lib/components/ProofingCanvas.svelte';
 
   const navTabs = ['Dashboard', 'My Projects', 'Files', 'Invoices', 'Messages'];
   const projectId = $derived($page.params.id);
@@ -16,13 +19,65 @@
   let files = $state<any[]>([]);
   let messages = $state<any[]>([]);
   let loading = $state(true);
-  let activeTab = $state('Overview');
+  const initialTab = $page.url.searchParams.get('tab');
+  let activeTab = $state(['Overview', 'Deliverables', 'Files', 'Tasks', 'Messages'].includes(initialTab || '') ? (initialTab as string) : 'Overview');
+  let tasks = $state<any[]>([]);
+  let uploadingFile = $state(false);
+  let payingFileId = $state<string | null>(null);
+  let fileInputEl = $state<HTMLInputElement | null>(null);
   let userMenuOpen = $state(false);
   let agencyLogo = $state('');
   let agencyName = $state('ClientDesk');
   let msgInput = $state('');
   let sendingMsg = $state(false);
   let messagesEnd: HTMLDivElement;
+
+  // Deliverables
+  let deliverables = $state<any[]>([]);
+  let proofingDeliverable = $state<any>(null);
+  let proofingPins = $state<any[]>([]);
+  let showProofing = $state(false);
+
+  let toastMsg = $state('');
+  let toastType = $state<'success' | 'error'>('success');
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    toastMsg = msg; toastType = type; setTimeout(() => { toastMsg = ''; }, 3000);
+  }
+
+  // AI Summary
+  let aiProjectSummary = $state('');
+  let aiProjectSummarizing = $state(false);
+  let showProjectSummary = $state(false);
+
+  async function summarizeProject() {
+    if (!project) return;
+    aiProjectSummarizing = true;
+    aiProjectSummary = '';
+    showProjectSummary = true;
+    try {
+      const res = await apiFetch('/api/ai/summarize', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          type: 'project',
+          data: {
+            projectName: project.name,
+            timeline: timeline.slice(0, 10).map(t => ({ status: t.status, content: t.content })),
+            milestones: milestones.map(m => ({ title: m.title, is_completed: m.is_completed, due_date: m.due_date })),
+            deliverables: deliverables.map(d => ({ title: d.title, version: d.version, status: d.status })),
+            recentMessages: messages.slice(-10).map(m => ({ sender_type: m.sender_type, content: m.content }))
+          }
+        })
+      });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Summarization failed');
+      aiProjectSummary = json.summary;
+    } catch (err: any) {
+      aiProjectSummary = `Error: ${err.message}`;
+    } finally {
+      aiProjectSummarizing = false;
+    }
+  }
 
   let dashArray = $derived(project ? `${project.progress || 0}, 100` : '0, 100');
 
@@ -35,18 +90,30 @@
     if (!data) { loading = false; return; }
     project = data;
 
-    const [tlRes, apRes, msRes, flRes, msgRes] = await Promise.all([
+    const [tlRes, apRes, msRes, flRes, msgRes, tkRes] = await Promise.all([
       supabase.from('timeline_updates').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
       supabase.from('approvals').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
       supabase.from('milestones').select('*').eq('project_id', projectId).order('due_date', { ascending: true }),
-      supabase.from('files').select('*').eq('project_id', projectId).eq('client_id', clientId).order('created_at', { ascending: false }),
-      supabase.from('messages').select('*').eq('client_id', clientId).eq('project_id', projectId).order('created_at', { ascending: true })
+      supabase.from('files').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
+      supabase.from('messages').select('*').eq('client_id', clientId).eq('project_id', projectId).order('created_at', { ascending: true }),
+      supabase.from('tasks').select('*').eq('project_id', projectId).order('created_at', { ascending: false })
     ]);
+    if (tkRes.data) tasks = tkRes.data;
     if (tlRes.data) timeline = tlRes.data;
     if (apRes.data) approvals = apRes.data;
     if (msRes.data) milestones = msRes.data;
     if (flRes.data) files = flRes.data;
     if (msgRes.data) messages = msgRes.data;
+
+    // Load deliverables
+    const { data: dels } = await supabase
+      .from('deliverables')
+      .select('*')
+      .eq('project_id', projectId)
+      .eq('client_id', clientId)
+      .order('created_at', { ascending: false });
+    if (dels) deliverables = dels;
+
     loading = false;
     setTimeout(() => messagesEnd?.scrollIntoView({ behavior: 'smooth' }), 100);
   }
@@ -73,9 +140,71 @@
           messages = [...messages, newMsg];
           setTimeout(() => messagesEnd?.scrollIntoView({ behavior: 'smooth' }), 50);
         }
-      }).subscribe();
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'tasks', filter: `project_id=eq.${projectId}` }, (payload: any) => {
+        if (payload.eventType === 'DELETE') tasks = tasks.filter(t => t.id !== payload.old.id);
+        else if (tasks.find(t => t.id === payload.new.id)) tasks = tasks.map(t => t.id === payload.new.id ? payload.new : t);
+        else tasks = [payload.new, ...tasks];
+      })
+      .on('postgres_changes', { event: '*', schema: 'public', table: 'files', filter: `project_id=eq.${projectId}` }, (payload: any) => {
+        if (payload.eventType === 'DELETE') files = files.filter(f => f.id !== payload.old.id);
+        else if (files.find(f => f.id === payload.new.id)) files = files.map(f => f.id === payload.new.id ? payload.new : f);
+        else files = [payload.new, ...files];
+      })
+      .subscribe();
     return () => { supabase.removeChannel(channel); };
   });
+
+  function isLocked(file: any) { return file.is_locked && !file.unlocked_at; }
+
+  async function uploadClientFile(e: Event) {
+    const input = e.target as HTMLInputElement;
+    const file = input.files?.[0];
+    if (!file || !$clientStore.client_id || !$clientStore.agency_id || !authState.user) return;
+    if (file.size > 50 * 1024 * 1024) { showToast('File must be under 50MB.', 'error'); input.value = ''; return; }
+    uploadingFile = true;
+    const path = `client-uploads/${$clientStore.client_id}/${Date.now()}_${file.name}`;
+    const { error: storageErr } = await supabase.storage.from('ClientDeskBucket').upload(path, file);
+    if (storageErr) { showToast('Upload failed: ' + storageErr.message, 'error'); uploadingFile = false; input.value = ''; return; }
+    const { data: urlData } = supabase.storage.from('ClientDeskBucket').getPublicUrl(path);
+    const { data, error } = await supabase.from('files').insert({
+      agency_id: $clientStore.agency_id,
+      client_id: $clientStore.client_id,
+      project_id: projectId,
+      file_name: file.name,
+      file_url: urlData?.publicUrl || '',
+      file_size: file.size,
+      file_type: file.type,
+      folder: 'client_uploads',
+      uploaded_by: authState.user.id,
+      is_locked: false
+    }).select('*').single();
+    if (error) showToast('Could not save file: ' + error.message, 'error');
+    else if (data) {
+      if (!files.find(f => f.id === data.id)) files = [data, ...files];
+      showToast('File uploaded');
+    }
+    uploadingFile = false;
+    input.value = '';
+  }
+
+  async function payForFile(file: any) {
+    if (!file.unlock_invoice_id) { goto('/client/invoices'); return; }
+    payingFileId = file.id;
+    try {
+      const res = await apiFetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: file.unlock_invoice_id })
+      });
+      const data = await res.json();
+      if (data.url) { window.location.href = data.url; return; }
+      showToast('Could not create payment session.', 'error');
+    } catch {
+      showToast('Payment failed. Please try again.', 'error');
+    }
+    payingFileId = null;
+  }
 
   async function sendMessage() {
     if (!msgInput.trim() || !$clientStore.client_id || !$clientStore.agency_id) return;
@@ -110,6 +239,35 @@
   }
   function formatSize(b: number | null) { if (!b) return ''; if (b < 1024) return b + ' B'; if (b < 1048576) return (b/1024).toFixed(1) + ' KB'; return (b/1048576).toFixed(1) + ' MB'; }
 
+  async function openProofing(del: any) {
+    const { data: pinsData } = await supabase.from('pins').select('*').eq('deliverable_id', del.id).order('created_at', { ascending: true });
+    proofingDeliverable = del;
+    proofingPins = pinsData || [];
+    showProofing = true;
+  }
+
+  function closeProofing() { showProofing = false; proofingDeliverable = null; proofingPins = []; }
+
+  function handleProofingStatusChange(newStatus: string, data?: any) {
+    if (proofingDeliverable) {
+      deliverables = deliverables.map(d => d.id === proofingDeliverable.id ? { ...d, status: newStatus, ...(data || {}) } : d);
+      proofingDeliverable = { ...proofingDeliverable, status: newStatus, ...(data || {}) };
+    }
+  }
+
+  function delStatusBadge(s: string) {
+    if (s === 'approved') return 'bg-[#dcfce7] text-[#166534]';
+    if (s === 'changes_requested') return 'bg-[#fef3c7] text-[#b45309]';
+    if (s === 'in_review') return 'bg-[#dbeafe] text-[#1e40af]';
+    return 'bg-surface-variant text-on-surface-variant';
+  }
+  function delStatusLabel(s: string) {
+    if (s === 'approved') return 'Approved';
+    if (s === 'changes_requested') return 'Changes Req.';
+    if (s === 'in_review') return 'In Review';
+    return 'Pending';
+  }
+
   async function handleSignOut() { userMenuOpen = false; await supabase.auth.signOut(); goto('/client/login'); }
 </script>
 
@@ -138,6 +296,7 @@
         </nav>
       </div>
       <div class="flex items-center gap-4">
+        <NotificationBell />
         <div class="relative">
           <button class="bg-primary-container text-on-primary-container w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center font-bold text-xs focus:outline-none" onclick={() => userMenuOpen = !userMenuOpen}>{initials($clientStore.full_name)}</button>
           {#if userMenuOpen}
@@ -170,6 +329,14 @@
             <div class="flex items-center gap-4">
               <h2 class="font-display-lg text-headline-lg md:text-display-lg tracking-tight">{project.name}</h2>
               <button
+                onclick={summarizeProject}
+                disabled={aiProjectSummarizing}
+                class="bg-white/10 hover:bg-white/20 text-white p-2 rounded-full transition-colors flex items-center justify-center disabled:opacity-50"
+                title="AI Project Summary"
+              >
+                <span class="material-symbols-outlined text-[20px] {aiProjectSummarizing ? 'animate-spin' : ''}">auto_awesome</span>
+              </button>
+              <button
                 onclick={manualReload}
                 disabled={loading}
                 class="bg-white/10 hover:bg-white/20 text-white p-2 rounded-full transition-colors flex items-center justify-center disabled:opacity-50"
@@ -193,10 +360,37 @@
         </div>
       </div>
 
+      <!-- AI Summary Panel -->
+      {#if showProjectSummary}
+        <div class="bg-tertiary-container/30 border border-tertiary/20 rounded-xl p-4">
+          <div class="flex items-start justify-between gap-3">
+            <div class="flex items-start gap-3 flex-1 min-w-0">
+              <span class="material-symbols-outlined text-tertiary shrink-0 mt-0.5">auto_awesome</span>
+              <div class="flex-1 min-w-0">
+                <p class="font-label-md text-label-md text-tertiary mb-2">AI Project Summary</p>
+                {#if aiProjectSummarizing}
+                  <p class="font-body-md text-body-md text-on-surface-variant">Generating summary...</p>
+                {:else}
+                  <p class="font-body-md text-body-md text-on-surface whitespace-pre-wrap">{aiProjectSummary}</p>
+                {/if}
+              </div>
+            </div>
+            <button onclick={() => { showProjectSummary = false; }} class="text-on-surface-variant hover:text-on-surface shrink-0 focus:outline-none">
+              <span class="material-symbols-outlined text-[20px]">close</span>
+            </button>
+          </div>
+        </div>
+      {/if}
+
       <!-- Tab Pills -->
       <div class="flex space-x-2 border-b border-surface-variant overflow-x-auto no-scrollbar pb-2">
-        {#each ['Overview', 'Files', 'Tasks', 'Messages'] as tab}
-          <button onclick={() => activeTab = tab} class="px-4 py-2 rounded-full font-label-md text-label-md shrink-0 focus:outline-none transition-colors {activeTab === tab ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/50'}">{tab}</button>
+        {#each ['Overview', 'Deliverables', 'Files', 'Tasks', 'Messages'] as tab}
+          <button onclick={() => activeTab = tab} class="px-4 py-2 rounded-full font-label-md text-label-md shrink-0 focus:outline-none transition-colors {activeTab === tab ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/50'}">
+            {tab}
+            {#if tab === 'Deliverables' && deliverables.length > 0}
+              <span class="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold {activeTab === tab ? 'bg-white/20' : 'bg-primary/10 text-primary'}">{deliverables.length}</span>
+            {/if}
+          </button>
         {/each}
       </div>
 
@@ -267,26 +461,133 @@
           </div>
         </div>
 
-      <!-- Files Tab -->
-      {:else if activeTab === 'Files'}
-        <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
-          {#each files as file (file.id)}
-            {@const ic = fileIcon(file.file_name)}
-            <div class="bg-surface rounded-xl p-4 shadow-sm border border-outline-variant/30 flex items-center gap-4 hover:border-primary/40 transition-colors">
-              <div class="w-12 h-12 rounded-xl {ic.bg} {ic.text} flex items-center justify-center shrink-0"><span class="material-symbols-outlined text-2xl">{ic.icon}</span></div>
-              <div class="flex-1 min-w-0">
-                <h3 class="text-sm font-bold text-on-surface truncate mb-0.5">{file.file_name}</h3>
-                <div class="flex items-center gap-2 text-xs text-on-surface-variant"><span>{formatSize(file.file_size)}</span><span>•</span><span>{fmtDate(file.created_at)}</span></div>
-              </div>
-              <a href={file.file_url} target="_blank" rel="noopener noreferrer" class="w-9 h-9 rounded-full hover:bg-primary-container text-primary flex items-center justify-center transition-colors shrink-0" title="Download"><span class="material-symbols-outlined text-[20px]">download</span></a>
+      <!-- Deliverables Tab -->
+      {:else if activeTab === 'Deliverables'}
+        <div class="space-y-6">
+          <h3 class="font-title-md text-title-md text-on-surface">Deliverables for Review ({deliverables.length})</h3>
+
+          {#if deliverables.length === 0}
+            <div class="flex flex-col items-center justify-center py-16 border-2 border-dashed border-outline-variant/40 rounded-xl text-center">
+              <span class="material-symbols-outlined text-5xl text-outline-variant mb-3">design_services</span>
+              <h3 class="font-title-md text-on-surface font-semibold mb-1">No deliverables yet</h3>
+              <p class="text-sm text-on-surface-variant">Your agency hasn't uploaded any deliverables for review yet.</p>
             </div>
-          {/each}
-          {#if files.length === 0}<div class="col-span-full py-12 text-center text-on-surface-variant bg-surface rounded-xl border border-outline-variant/20"><span class="material-symbols-outlined text-4xl text-outline-variant mb-2 block">folder_off</span>No files for this project.</div>{/if}
+          {:else}
+            <div class="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 gap-4">
+              {#each deliverables as del (del.id)}
+                <div class="bg-surface rounded-xl overflow-hidden shadow-sm border border-outline-variant/30 hover:shadow-md hover:border-primary/30 transition-all group cursor-pointer" onclick={() => openProofing(del)}>
+                  <div class="h-40 bg-surface-container-high relative overflow-hidden">
+                    {#if del.file_type === 'image' && del.file_url}
+                      <img src={del.thumbnail_url || del.file_url} alt={del.title} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    {:else}
+                      <div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100">
+                        <span class="material-symbols-outlined text-5xl text-red-400">picture_as_pdf</span>
+                      </div>
+                    {/if}
+                    <div class="absolute top-2 right-2">
+                      <span class="{delStatusBadge(del.status)} px-2 py-0.5 rounded-full text-[10px] font-bold uppercase shadow-sm">{delStatusLabel(del.status)}</span>
+                    </div>
+                    <div class="absolute bottom-2 left-2">
+                      <span class="bg-black/60 text-white px-2 py-0.5 rounded text-[10px] font-bold">v{del.version}</span>
+                    </div>
+                  </div>
+                  <div class="p-4">
+                    <h4 class="font-title-md text-on-surface truncate mb-1">{del.title}</h4>
+                    {#if del.description}<p class="text-xs text-on-surface-variant truncate mb-2">{del.description}</p>{/if}
+                    <div class="flex items-center justify-between">
+                      <span class="text-[11px] text-outline">{fmtDate(del.created_at)}</span>
+                      <button onclick={(e) => { e.stopPropagation(); openProofing(del); }} class="text-primary hover:bg-primary/10 px-2 py-1 rounded-lg text-xs font-semibold flex items-center gap-1 transition-colors focus:outline-none">
+                        <span class="material-symbols-outlined text-[16px]">rate_review</span> Review
+                      </button>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
         </div>
 
-      <!-- Tasks Tab (placeholder) -->
+      <!-- Files Tab -->
+      {:else if activeTab === 'Files'}
+        <div class="space-y-4 animate-fadeIn">
+          <div class="flex items-center justify-between">
+            <h3 class="text-sm font-medium text-on-surface">Project Files ({files.length})</h3>
+            <div>
+              <input type="file" class="hidden" bind:this={fileInputEl} onchange={uploadClientFile} />
+              <button onclick={() => fileInputEl?.click()} disabled={uploadingFile} class="bg-primary hover:bg-primary-hover text-white px-3 py-1.5 rounded-lg text-[13px] font-medium transition-colors flex items-center gap-1.5 disabled:opacity-50">
+                {#if uploadingFile}<div class="w-3.5 h-3.5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> Uploading...{:else}<span class="material-symbols-outlined text-[16px]">upload_file</span> Upload File{/if}
+              </button>
+            </div>
+          </div>
+          {#if files.length === 0}
+            <div class="py-14 text-center border border-dashed border-outline-variant rounded-lg">
+              <span class="material-symbols-outlined text-[28px] text-outline mb-2 block">folder_off</span>
+              <p class="text-sm font-medium text-on-surface mb-1">No files for this project</p>
+              <p class="text-[13px] text-on-surface-variant">Files your agency shares appear here. You can also upload files for them.</p>
+            </div>
+          {:else}
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
+              {#each files as file (file.id)}
+                {@const ic = fileIcon(file.file_name)}
+                {@const locked = isLocked(file)}
+                <div class="bg-white rounded-lg p-4 shadow-xs border {locked ? 'border-tertiary/30' : 'border-outline-variant'} flex flex-col">
+                  <div class="flex items-start gap-3 mb-3">
+                    <div class="w-9 h-9 rounded-lg {ic.bg} {ic.text} flex items-center justify-center shrink-0 {locked ? 'opacity-50' : ''}"><span class="material-symbols-outlined text-[18px]">{ic.icon}</span></div>
+                    <div class="flex-1 min-w-0">
+                      <h4 class="text-sm font-medium text-on-surface truncate" title={file.file_name}>{file.file_name}</h4>
+                      <p class="text-xs text-on-surface-variant">{formatSize(file.file_size)}{file.file_size ? ' · ' : ''}{fmtDate(file.created_at)}</p>
+                      <div class="flex flex-wrap gap-1 mt-1.5">
+                        {#if file.folder === 'client_uploads'}<span class="px-1.5 py-0.5 rounded bg-secondary/[0.08] text-secondary text-[10px] font-medium">Uploaded by you</span>{/if}
+                        {#if locked}<span class="px-1.5 py-0.5 rounded bg-tertiary-container text-on-tertiary-container text-[10px] font-medium flex items-center gap-0.5"><span class="material-symbols-outlined text-[10px]">lock</span>{file.unlock_type === 'approval' ? 'Approval required' : 'Payment required'}</span>{/if}
+                      </div>
+                    </div>
+                  </div>
+                  <div class="mt-auto pt-3 border-t border-outline-variant flex items-center justify-end">
+                    {#if locked}
+                      {#if file.unlock_type === 'approval'}
+                        <button onclick={() => activeTab = 'Deliverables'} class="bg-tertiary hover:opacity-90 text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">thumb_up</span> Approve to unlock</button>
+                      {:else}
+                        <button onclick={() => payForFile(file)} disabled={payingFileId === file.id} class="bg-primary hover:bg-primary-hover text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 disabled:opacity-50"><span class="material-symbols-outlined text-[14px]">payments</span> {payingFileId === file.id ? 'Redirecting...' : 'Pay to unlock'}</button>
+                      {/if}
+                    {:else}
+                      <a href={file.file_url} target="_blank" rel="noopener noreferrer" download class="text-primary hover:bg-primary/[0.06] px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 no-underline"><span class="material-symbols-outlined text-[14px]">download</span> Download</a>
+                    {/if}
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
+
+      <!-- Tasks Tab -->
       {:else if activeTab === 'Tasks'}
-        <div class="py-20 text-center bg-surface border border-outline-variant/30 rounded-xl"><span class="material-symbols-outlined text-5xl text-outline-variant mb-4 block">construction</span><h3 class="font-title-md text-on-surface font-semibold mb-1">Tasks — Coming Soon</h3><p class="text-sm text-on-surface-variant">Task visibility for clients is under development.</p></div>
+        <div class="space-y-4 animate-fadeIn">
+          <h3 class="text-sm font-medium text-on-surface">Tasks ({tasks.filter(t => t.status !== 'done').length} open, {tasks.filter(t => t.status === 'done').length} done)</h3>
+          {#if tasks.length === 0}
+            <div class="py-14 text-center border border-dashed border-outline-variant rounded-lg">
+              <span class="material-symbols-outlined text-[28px] text-outline mb-2 block">task_alt</span>
+              <p class="text-sm font-medium text-on-surface mb-1">No tasks yet</p>
+              <p class="text-[13px] text-on-surface-variant">Your agency's tasks for this project will show up here.</p>
+            </div>
+          {:else}
+            <div class="bg-white border border-outline-variant rounded-lg shadow-xs divide-y divide-outline-variant">
+              {#each tasks as t (t.id)}
+                <div class="flex items-start gap-3 px-4 py-3">
+                  <span class="material-symbols-outlined text-[20px] mt-0.5 shrink-0 {t.status === 'done' ? 'text-success' : 'text-outline'}" style={t.status === 'done' ? "font-variation-settings: 'FILL' 1;" : ''}>{t.status === 'done' ? 'check_circle' : 'radio_button_unchecked'}</span>
+                  <div class="flex-1 min-w-0">
+                    <p class="text-sm font-medium {t.status === 'done' ? 'line-through text-on-surface-variant' : 'text-on-surface'}">{t.title}</p>
+                    {#if t.description}<p class="text-[13px] text-on-surface-variant mt-0.5">{t.description}</p>{/if}
+                    <div class="flex flex-wrap gap-1.5 mt-1.5">
+                      <span class="px-1.5 py-0.5 rounded text-[10px] font-medium {t.priority === 'high' ? 'bg-error-container text-on-error-container' : t.priority === 'low' ? 'bg-surface-container text-on-surface-variant' : 'bg-tertiary-container text-on-tertiary-container'}">{t.priority || 'medium'}</span>
+                      {#if t.category}<span class="px-1.5 py-0.5 rounded bg-primary/[0.08] text-primary text-[10px] font-medium">{t.category}</span>{/if}
+                      <span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-medium">{t.status === 'this_week' ? 'This week' : t.status === 'done' ? 'Done' : 'Today'}</span>
+                    </div>
+                  </div>
+                </div>
+              {/each}
+            </div>
+          {/if}
+        </div>
 
       <!-- Messages Tab -->
       {:else if activeTab === 'Messages'}
@@ -314,3 +615,24 @@
     {/if}
   </main>
 </div>
+
+<!-- Proofing Canvas -->
+{#if showProofing && proofingDeliverable}
+  <ProofingCanvas
+    deliverable={proofingDeliverable}
+    pins={proofingPins}
+    userRole="client"
+    agencyId={project?.agency_id || $clientStore.agency_id || ''}
+    userId={authState.user?.id || ''}
+    userName={$clientStore.full_name || 'Client'}
+    onClose={closeProofing}
+    onStatusChange={handleProofingStatusChange}
+  />
+{/if}
+
+{#if toastMsg}
+  <div class="fixed bottom-6 right-6 z-[200] px-5 py-3 rounded-xl shadow-lg flex items-center gap-2 font-body-md text-body-md {toastType === 'success' ? 'bg-primary-container text-on-primary-container' : 'bg-error-container text-on-error-container'}">
+    <span class="material-symbols-outlined text-lg">{toastType === 'success' ? 'check_circle' : 'error'}</span>
+    {toastMsg}
+  </div>
+{/if}

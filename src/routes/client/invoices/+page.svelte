@@ -1,8 +1,12 @@
 <script lang="ts">
+  import NotificationBell from '$lib/components/NotificationBell.svelte';
+  import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { clientStore } from '$lib/clientStore';
   import { authState } from '$lib/auth.svelte';
   import { goto } from '$app/navigation';
+  import { page } from '$app/stores';
+  import { onMount } from 'svelte';
 
   const navTabs = ['Dashboard', 'My Projects', 'Files', 'Invoices', 'Messages'];
 
@@ -13,6 +17,26 @@
   let selectedInvoice = $state<any>(null);
   let isModalOpen = $state(false);
   let isPrinting = $state(false);
+  let payingInvoiceId = $state<string | null>(null);
+  let toastMsg = $state('');
+  let toastType = $state<'success' | 'error'>('success');
+
+  function showToast(msg: string, type: 'success' | 'error' = 'success') {
+    toastMsg = msg;
+    toastType = type;
+    setTimeout(() => toastMsg = '', 3000);
+  }
+
+  onMount(() => {
+    const payment = $page.url.searchParams.get('payment');
+    if (payment === 'success') {
+      showToast('Payment successful! Thank you.');
+      history.replaceState(null, '', '/client/invoices');
+    } else if (payment === 'cancelled') {
+      showToast('Payment was cancelled.', 'error');
+      history.replaceState(null, '', '/client/invoices');
+    }
+  });
 
   let agencyLogo = $derived($clientDataStore.agencyLogo);
   let agencyName = $derived($clientDataStore.agencyName || 'ClientDesk');
@@ -24,7 +48,7 @@
     return invoices.filter(i => i.status === activeFilter);
   });
 
-  let pendingTotal = $derived(invoices.filter(i => i.status === 'pending').reduce((s, i) => s + Number(i.total || 0), 0));
+  let pendingTotal = $derived(invoices.filter(i => i.status === 'pending' || i.status === 'sent').reduce((s, i) => s + Number(i.total || 0), 0));
   let paidTotal = $derived(invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total || 0), 0));
 
   function tabHref(tab: string) {
@@ -72,22 +96,26 @@
     }, 100);
   }
 
-  async function simulatePayment() {
-    if (!selectedInvoice) return;
-    
-    // In a real app, this would integrate with Stripe/Razorpay
-    // For now, we simulate a successful payment by updating the DB status to 'paid'
-    const { error } = await supabase
-      .from('invoices')
-      .update({ status: 'paid' })
-      .eq('id', selectedInvoice.id);
-      
-    if (!error) {
-      invoices = invoices.map(i => i.id === selectedInvoice.id ? { ...i, status: 'paid' } : i);
-      closeInvoiceModal();
-      alert('Payment successful! Thank you.');
-    } else {
-      alert('Payment failed. Please try again.');
+  async function payWithStripe(invoiceId?: string) {
+    const id = invoiceId || selectedInvoice?.id;
+    if (!id) return;
+    payingInvoiceId = id;
+    try {
+      const res = await apiFetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: id }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        showToast('Could not create payment session.', 'error');
+        payingInvoiceId = null;
+      }
+    } catch {
+      showToast('Payment failed. Please try again.', 'error');
+      payingInvoiceId = null;
     }
   }
 </script>
@@ -122,36 +150,36 @@
 <!-- Main Interface -->
 <div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex overflow-hidden w-full {isPrinting ? 'print-hide' : ''}">
   <!-- Top Nav -->
-  <div class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-surface/90 backdrop-blur-xl shadow-sm border-b border-outline-variant/10">
+  <div class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-14 bg-white border-b border-outline-variant">
     <div class="flex items-center gap-8 w-full max-w-container-max mx-auto justify-between">
       <div class="flex items-center gap-8">
         <a href="/client/dashboard" class="flex items-center">
           {#if agencyLogo}
-            <img src={agencyLogo} alt="{agencyName} Logo" class="h-8 max-w-[150px] object-contain" />
+            <img src={agencyLogo} alt="{agencyName} Logo" class="h-7 max-w-[140px] object-contain" />
           {:else}
-            <span class="font-headline-md text-headline-md font-bold text-primary">{agencyName}</span>
+            <span class="text-[15px] font-semibold text-on-surface tracking-tight">{agencyName}</span>
           {/if}
         </a>
-        <nav class="hidden md:flex gap-8">
+        <nav class="hidden md:flex gap-1">
           {#each navTabs as tab}
-            <a href={tabHref(tab)} class="relative font-label-md text-label-md transition-colors duration-150 py-5 focus:outline-none {tab === 'Invoices' ? 'text-primary border-b-2 border-primary font-bold' : 'text-on-surface-variant hover:text-on-surface'}">{tab}</a>
+            <a href={tabHref(tab)} class="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors {tab === 'Invoices' ? 'text-primary bg-primary/[0.06]' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}">{tab}</a>
           {/each}
         </nav>
       </div>
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <NotificationBell />
         <div class="relative">
-          <button class="flex items-center active:scale-95 transition-transform duration-150 focus:outline-none bg-primary-container text-on-primary-container w-8 h-8 rounded-full border border-outline-variant justify-center font-bold text-xs" onclick={() => userMenuOpen = !userMenuOpen}>
-            {initials($clientStore.full_name)}
+          <button class="flex items-center focus:outline-none" onclick={() => userMenuOpen = !userMenuOpen}>
+            <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">{initials($clientStore.full_name)}</div>
           </button>
           {#if userMenuOpen}
-            <div class="absolute right-0 top-10 w-48 bg-surface-container-lowest border border-outline-variant/50 rounded-xl shadow-lg py-2 z-50">
-              <div class="px-4 py-2 border-b border-outline-variant/30">
-                <p class="text-xs font-semibold text-on-surface">{$clientStore.full_name || 'Client'}</p>
-                <p class="text-[10px] text-outline truncate">{authState.user?.email || ''}</p>
+            <div class="absolute right-0 top-11 w-52 bg-white border border-outline-variant rounded-lg shadow-dropdown py-1 z-50 animate-fadeIn">
+              <div class="px-4 py-2.5 border-b border-outline-variant">
+                <p class="text-sm font-medium text-on-surface">{$clientStore.full_name || 'Client'}</p>
+                <p class="text-xs text-on-surface-variant truncate mt-0.5">{authState.user?.email || ''}</p>
               </div>
-              <hr class="border-outline-variant/30 my-1" />
-              <button class="w-full text-left px-4 py-2 text-xs text-error hover:bg-error-container/20 transition-colors flex items-center gap-2" onclick={handleSignOut}>
-                <span class="material-symbols-outlined text-sm">logout</span> Sign Out
+              <button class="w-full text-left px-4 py-2 text-sm text-error hover:bg-error-container/30 transition-colors flex items-center gap-2" onclick={handleSignOut}>
+                <span class="material-symbols-outlined text-[18px]">logout</span> Sign Out
               </button>
             </div>
           {/if}
@@ -160,49 +188,43 @@
     </div>
   </div>
 
-  <!-- Main -->
-  <main class="flex-1 overflow-y-auto mt-16 px-margin-desktop py-8 max-w-container-max mx-auto w-full">
+  <main class="flex-1 overflow-y-auto mt-14 px-6 py-6 max-w-container-max mx-auto w-full">
     {#if loading}
-      <div class="py-20 flex justify-center items-center"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>
+      <div class="animate-shimmer rounded-lg h-16 mb-5"></div>
+      <div class="grid grid-cols-2 gap-3 mb-5">
+        {#each Array(2) as _}<div class="h-20 animate-shimmer rounded-lg"></div>{/each}
+      </div>
     {:else}
-      <!-- Hero -->
-      <div class="bg-gradient-to-r from-[#7C3AED] to-[#EC4899] rounded-2xl p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-lg mb-8 relative overflow-hidden">
-        <div class="absolute -right-20 -top-20 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
-        <div class="relative z-10">
-          <h1 class="font-display-md font-bold mb-2">My Invoices</h1>
-          <p class="font-body-md text-white/90">Manage your billing and payments.</p>
-        </div>
-        <div class="relative z-10 mt-6 md:mt-0 bg-white/10 backdrop-blur-md rounded-xl px-8 py-5 border border-white/20 text-center md:text-right">
-          <p class="text-sm text-white/80 uppercase tracking-wider font-semibold mb-1">Total Amount Due</p>
-          <p class="font-display-md font-bold">{fmt(pendingTotal)}</p>
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 animate-fadeIn">
+        <div>
+          <h1 class="text-xl font-semibold text-on-surface mb-1">My Invoices</h1>
+          <p class="text-sm text-on-surface-variant">Amount due: <span class="font-medium text-on-surface">{fmt(pendingTotal)}</span></p>
         </div>
       </div>
 
-      <!-- Stat Cards -->
-      <div class="grid grid-cols-1 sm:grid-cols-2 gap-6 mb-8">
-        <div class="bg-surface border border-[#bbf7d0] rounded-xl p-6 shadow-sm flex items-center gap-5">
-          <div class="w-14 h-14 rounded-full bg-[#dcfce7] flex items-center justify-center shrink-0">
-            <span class="material-symbols-outlined text-[#166534] text-3xl" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+      <div class="grid grid-cols-1 sm:grid-cols-2 gap-3 mb-5">
+        <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant flex items-center gap-3">
+          <div class="w-7 h-7 rounded-lg bg-success/[0.08] flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-success text-[18px]">check_circle</span>
           </div>
           <div>
-            <p class="text-sm font-semibold text-[#166534] uppercase tracking-wider mb-1">Total Paid</p>
-            <h4 class="font-display-sm font-bold text-on-surface">{fmt(paidTotal)}</h4>
+            <p class="text-xs text-on-surface-variant mb-0.5">Total Paid</p>
+            <h4 class="text-[15px] font-semibold text-on-surface">{fmt(paidTotal)}</h4>
           </div>
         </div>
-        
-        <div class="bg-surface border border-[#fed7aa] rounded-xl p-6 shadow-sm flex items-center gap-5">
-          <div class="w-14 h-14 rounded-full bg-[#fef3c7] flex items-center justify-center shrink-0">
-            <span class="material-symbols-outlined text-[#b45309] text-3xl" style="font-variation-settings: 'FILL' 1;">schedule</span>
+
+        <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant flex items-center gap-3">
+          <div class="w-7 h-7 rounded-lg bg-tertiary/[0.08] flex items-center justify-center shrink-0">
+            <span class="material-symbols-outlined text-tertiary text-[18px]">schedule</span>
           </div>
           <div>
-            <p class="text-sm font-semibold text-[#b45309] uppercase tracking-wider mb-1">Total Pending</p>
-            <h4 class="font-display-sm font-bold text-on-surface">{fmt(pendingTotal)}</h4>
+            <p class="text-xs text-on-surface-variant mb-0.5">Total Pending</p>
+            <h4 class="text-[15px] font-semibold text-on-surface">{fmt(pendingTotal)}</h4>
           </div>
         </div>
       </div>
 
-      <!-- Filters -->
-      <div class="flex space-x-2 overflow-x-auto pb-2 mb-8">
+      <div class="flex gap-1.5 overflow-x-auto pb-1 mb-5">
         {#each [
           { key: 'all', label: 'All' },
           { key: 'paid', label: 'Paid' },
@@ -210,7 +232,7 @@
           { key: 'overdue', label: 'Overdue' }
         ] as filter}
           <button
-            class="px-5 py-2.5 rounded-full font-label-md text-label-md whitespace-nowrap transition-all duration-150 focus:outline-none {activeFilter === filter.key ? 'bg-primary text-white shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/30'}"
+            class="px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors {activeFilter === filter.key ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
             onclick={() => activeFilter = filter.key}
           >
             {filter.label}
@@ -233,6 +255,14 @@
                 <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-error-container text-on-error-container flex items-center gap-1">
                   <span class="material-symbols-outlined text-[12px]">warning</span> Overdue
                 </span>
+              {:else if inv.status === 'sent'}
+                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#dbeafe] text-[#1e40af] flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[12px]">mail</span> Sent
+                </span>
+              {:else if inv.status === 'draft'}
+                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-surface-variant text-on-surface-variant flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[12px]">edit_note</span> Draft
+                </span>
               {:else}
                 <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#fff7ed] text-[#ea580c] flex items-center gap-1">
                   <span class="material-symbols-outlined text-[12px]">schedule</span> Pending
@@ -251,7 +281,7 @@
                 <div class="flex justify-between font-bold text-on-surface-variant"><span>Total:</span> <span>{fmt(Number(inv.total || 0))}</span></div>
               </div>
 
-              {#if (inv.status === 'pending' || inv.status === 'overdue') && inv.due_date}
+              {#if (inv.status === 'sent' || inv.status === 'pending' || inv.status === 'overdue') && inv.due_date}
                 <p class="text-xs text-error mt-4 font-medium flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">event</span> Due {fmtDate(inv.due_date)}</p>
               {:else}
                 <p class="text-xs text-outline mt-4 flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">event</span> Issued {fmtDate(inv.created_at)}</p>
@@ -260,18 +290,36 @@
 
             <div class="mt-auto">
               {#if inv.status === 'paid'}
-                <button 
-                  onclick={() => generatePDF(inv)}
-                  class="w-full bg-surface-variant hover:bg-outline-variant text-on-surface-variant font-label-md py-2.5 rounded-lg transition-colors text-sm font-bold focus:outline-none flex items-center justify-center gap-2"
-                >
-                  <span class="material-symbols-outlined text-[18px]">download</span> Download PDF
-                </button>
+                <div class="flex gap-2">
+                  <span class="flex-1 bg-[#dcfce7] text-[#166534] font-label-md py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1">
+                    <span class="material-symbols-outlined text-[16px]">check_circle</span> Paid
+                    {#if inv.paid_at}
+                      <span class="text-[10px] font-normal ml-1">({new Date(inv.paid_at).toLocaleDateString('en-IN', { day: 'numeric', month: 'short' })})</span>
+                    {/if}
+                  </span>
+                  <button
+                    onclick={() => generatePDF(inv)}
+                    class="bg-surface-variant hover:bg-outline-variant text-on-surface-variant font-label-md py-2.5 px-3 rounded-lg transition-colors text-sm font-bold focus:outline-none flex items-center justify-center gap-1"
+                  >
+                    <span class="material-symbols-outlined text-[18px]">download</span>
+                  </button>
+                </div>
+              {:else if inv.status === 'draft'}
+                <span class="w-full bg-surface-variant text-on-surface-variant font-label-md py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1">
+                  <span class="material-symbols-outlined text-[16px]">edit_note</span> Draft
+                </span>
               {:else}
-                <button 
-                  onclick={() => openInvoiceModal(inv)}
-                  class="w-full bg-primary hover:bg-primary/90 text-white font-label-md py-2.5 rounded-lg shadow-sm transition-colors text-sm font-bold focus:outline-none flex items-center justify-center gap-2"
+                <button
+                  onclick={() => payWithStripe(inv.id)}
+                  disabled={payingInvoiceId === inv.id}
+                  class="w-full bg-primary hover:bg-primary/90 text-white font-label-md py-2.5 rounded-lg shadow-sm transition-colors text-sm font-bold focus:outline-none flex items-center justify-center gap-2 disabled:opacity-50"
                 >
-                  <span class="material-symbols-outlined text-[18px]">payments</span> Pay Now
+                  {#if payingInvoiceId === inv.id}
+                    <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+                    Redirecting...
+                  {:else}
+                    <span class="material-symbols-outlined text-[18px]">payments</span> Pay Now
+                  {/if}
                 </button>
               {/if}
             </div>
@@ -382,8 +430,13 @@
         <button class="px-5 py-2.5 rounded-lg text-sm font-semibold text-on-surface-variant hover:bg-surface-container transition-colors focus:outline-none" onclick={closeInvoiceModal}>
           Cancel
         </button>
-        <button class="px-6 py-2.5 rounded-lg text-sm font-bold text-white bg-[#10b981] hover:bg-[#059669] shadow-md transition-all active:scale-95 focus:outline-none flex items-center gap-2" onclick={simulatePayment}>
-          <span class="material-symbols-outlined text-[18px]">credit_card</span> Pay {fmt(Number(selectedInvoice.total || 0))}
+        <button class="px-6 py-2.5 rounded-lg text-sm font-bold text-white bg-[#10b981] hover:bg-[#059669] shadow-md transition-all active:scale-95 focus:outline-none flex items-center gap-2 disabled:opacity-50" onclick={() => payWithStripe(selectedInvoice.id)} disabled={payingInvoiceId === selectedInvoice.id}>
+          {#if payingInvoiceId === selectedInvoice.id}
+            <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+            Redirecting to Stripe...
+          {:else}
+            <span class="material-symbols-outlined text-[18px]">credit_card</span> Pay {fmt(Number(selectedInvoice.total || 0))}
+          {/if}
         </button>
       </div>
     </div>
@@ -461,5 +514,12 @@
     <div style="margin-top: 60px; text-align: center; color: #888; font-size: 14px;">
       <p>Thank you for your business!</p>
     </div>
+  </div>
+{/if}
+
+{#if toastMsg}
+  <div class="fixed bottom-6 right-6 z-[200] px-5 py-3 rounded-lg shadow-lg font-body-md text-body-md flex items-center gap-2 {toastType === 'error' ? 'bg-error-container text-on-error-container' : 'bg-on-surface text-surface'}">
+    <span class="material-symbols-outlined text-sm">{toastType === 'error' ? 'error' : 'check_circle'}</span>
+    {toastMsg}
   </div>
 {/if}

@@ -6,7 +6,6 @@
   import ProjectProfile from '$lib/components/ProjectProfile.svelte';
   import FileCard, { type FileProps } from '$lib/components/FileCard.svelte';
   import InvoiceCard, { type InvoiceProps } from '$lib/components/InvoiceCard.svelte';
-  import CreateInvoice from '$lib/components/CreateInvoice.svelte';
   import Messages from '$lib/components/Messages.svelte';
   import Settings from '$lib/components/Settings.svelte';
   import { supabase } from '$lib/supabaseClient';
@@ -59,13 +58,7 @@
   // Drag-and-drop state
   let draggedTaskId = $state<string | null>(null);
 
-  // Notifications State
-  let notificationsOpen = $state(false);
-  let notifications = $state([
-    { id: 1, text: 'Roshan added you to "Finalize UI Designs"', time: '10m ago', unread: true },
-    { id: 2, text: 'New invoice #INV-2026-08 generated', time: '2h ago', unread: true },
-    { id: 3, text: 'Client Acme Corp approved the API spec', time: '1d ago', unread: false }
-  ]);
+  // Notifications State (managed in AgencyHeader)
 
   // User Profile Dropdown State
   let userMenuOpen = $state(false);
@@ -190,11 +183,12 @@
     goto('/login');
   }
 
-  function markAllRead() {
-    notifications = notifications.map(n => ({ ...n, unread: false }));
-  }
 
   let allFilesRaw = $derived($agencyDataStore.files);
+
+  function folderCount(folder: string) {
+    return allFilesRaw.filter(f => f.folder === folder).length;
+  }
 
   let realClientsCount = $derived($agencyDataStore.clients.length);
   let activeProjectsCount = $derived($agencyDataStore.projects.filter(p => p.status === 'active').length);
@@ -211,7 +205,7 @@
     name: c.company || c.full_name,
     industry: 'Client',
     projectsCount: $agencyDataStore.projects.filter(p => p.client_id === c.id).length,
-    status: c.status === 'active' ? 'Active' : 'Inactive',
+    status: (c.status === 'active' ? 'Active' : 'Inactive') as 'Active' | 'Inactive',
     theme: 'primary' as const,
     avatar: c.avatar_url
   })));
@@ -219,7 +213,7 @@
   let projectsData = $derived($agencyDataStore.projects.map(p => ({
     id: p.id,
     name: p.name,
-    status: p.status === 'active' ? 'Active' : p.status === 'completed' ? 'Completed' : 'On Hold',
+    status: (p.status === 'active' ? 'Active' : p.status === 'completed' ? 'Completed' : 'On Hold') as 'Active' | 'On Hold' | 'Completed',
     clientName: p.clients?.full_name || 'Unknown',
     clientLogo: p.clients?.avatar_url,
     progress: p.progress,
@@ -229,18 +223,18 @@
 
   let invoicesData = $derived($agencyDataStore.invoices.map(i => ({
     id: i.invoice_number,
-    status: i.status === 'paid' ? 'Paid' : i.status === 'pending' ? 'Pending' : 'Overdue',
+    status: (i.status === 'paid' ? 'Paid' : i.status === 'pending' ? 'Pending' : 'Overdue') as 'Paid' | 'Pending' | 'Overdue',
     clientName: i.clients?.full_name || 'Unknown',
     clientAvatar: i.clients?.avatar_url,
     clientInitials: i.clients?.full_name ? i.clients.full_name.substring(0, 2).toUpperCase() : 'NA',
-    theme: i.status === 'paid' ? 'secondary' : i.status === 'overdue' ? 'primary' : 'tertiary',
+    theme: (i.status === 'paid' ? 'secondary' : i.status === 'overdue' ? 'primary' : 'tertiary') as 'primary' | 'secondary' | 'tertiary',
     amount: `$${i.total.toLocaleString()}`
   })));
 
   let filesData = $derived($agencyDataStore.files.map(f => ({
     id: f.id,
     name: f.file_name,
-    type: f.file_name.endsWith('.pdf') ? 'pdf' : f.file_name.endsWith('.zip') ? 'zip' : 'image',
+    type: (f.file_name.endsWith('.pdf') ? 'pdf' : f.file_name.endsWith('.zip') ? 'zip' : 'image') as 'pdf' | 'zip' | 'image' | 'doc',
     size: f.file_size ? `${(f.file_size / 1024 / 1024).toFixed(1)} MB` : 'Unknown',
     date: new Date(f.created_at).toLocaleDateString(),
     uploaderAvatars: ['https://lh3.googleusercontent.com/aida-public/AB6AXuA2pquS7vAc_d3Qio3jPCeRij5_GIGG-hFiZWIwn369izlsJQ37ZmtRkRoptY_SEyXcUZFIRVq7PXdyYPzuOIZAQUR_mU_rTJ545lNRIgI7Rvue9QcrTo-YQ2s0tjSUiAS4Zw86aRzEz8wZFmrEkBP3NINIhV5LlHvv_spUkjlZAPaVSqEcMBvxbOPZSCkZBuaI2pe6BvRqQED_6o8WKRlXS_JLDOBqw-wrEgXdjg6kY8JT1t9aNg19gvyF3KTQz7F_1P-u0izXU-Q0']
@@ -267,7 +261,6 @@
   let selectedProjectId = $state<string | null>(null);
   let selectedProject = $derived(selectedProjectId ? projectsData.find(p => p.id === selectedProjectId) : null);
 
-  let isCreatingInvoice = $state(false);
 </script>
 
 <svelte:head>
@@ -289,119 +282,71 @@
       class="flex-1 overflow-y-auto mt-16 px-margin-desktop py-8 max-w-container-max mx-auto w-full"
     >
       {#if activeTab === "Dashboard"}
-        <!-- Hero Card -->
-        <div
-          class="rounded-xl bg-gradient-to-r from-primary to-[#d946ef] p-8 text-on-primary relative overflow-hidden shadow-[0px_10px_25px_rgba(99,14,212,0.15)] mb-stack-md flex justify-between items-end"
-        >
-          <div
-            class="relative z-10 flex flex-col justify-between h-full w-full"
-          >
-            <div>
-              <h2 class="font-headline-lg text-headline-lg font-bold mb-2">
-                {timeOfDay}
-                {authState.userFullName
-                  ? authState.userFullName.split(" ")[0]
-                  : authState.user?.email?.split("@")[0] || "there"} 👋
-              </h2>
-              <p class="font-body-md text-body-md text-on-primary/80">
-                Here's what's happening today
-              </p>
-            </div>
-            <div class="mt-8">
-              <p
-                class="font-label-md text-label-md text-on-primary/70 uppercase mb-1"
-              >
-                TOTAL REVENUE
-              </p>
-              <p class="font-display-lg text-display-lg font-bold">
-                {fmtINR(totalRevenue)}
-              </p>
-            </div>
+        <!-- Welcome + Stats -->
+        <div class="flex flex-col md:flex-row md:items-end justify-between mb-6 gap-4">
+          <div>
+            <h1 class="text-xl font-semibold text-on-surface mb-1">
+              {timeOfDay}
+              {authState.userFullName
+                ? authState.userFullName.split(" ")[0]
+                : authState.user?.email?.split("@")[0] || "there"}
+            </h1>
+            <p class="text-sm text-on-surface-variant">
+              Here's what's happening today
+            </p>
           </div>
-          <button
-            onclick={() => {
-              isModalOpen = true;
-            }}
-            class="relative z-10 bg-[#10b981] hover:bg-[#059669] text-white px-6 py-3 rounded-lg font-title-md text-title-md font-semibold transition-colors shadow-md flex items-center gap-2 active:scale-95 transition-transform duration-100"
+          <a
+            href="/projects"
+            class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 w-fit"
           >
-            <span class="material-symbols-outlined text-[20px]" data-icon="add"
-              >add</span
-            >
+            <span class="material-symbols-outlined text-[18px]">add</span>
             New Project
-          </button>
-          <!-- Decorative abstract shapes -->
-          <div
-            class="absolute top-0 right-0 -mr-20 -mt-20 w-64 h-64 rounded-full bg-white opacity-10 blur-2xl pointer-events-none"
-          />
-          <div
-            class="absolute bottom-0 right-20 w-40 h-40 rounded-full bg-white opacity-10 blur-xl pointer-events-none"
-          />
+          </a>
         </div>
 
         <!-- Stat Cards Row -->
-        <div class="grid grid-cols-1 md:grid-cols-3 gap-gutter mb-stack-md">
-          <!-- Stat 1 -->
-          <div
-            class="bg-gradient-to-br from-secondary-container to-secondary p-6 rounded-xl text-on-secondary shadow-sm flex flex-col justify-center min-h-[120px] hover:shadow-md transition-shadow"
-          >
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-display-lg text-display-lg font-bold">
-                  {clientsCount}
-                </p>
-                <p class="font-body-md text-body-md opacity-90">Clients</p>
+        <div class="grid grid-cols-1 md:grid-cols-4 gap-4 mb-6">
+          <div class="bg-white p-5 rounded-lg border border-outline-variant shadow-xs">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-primary/10 text-primary flex items-center justify-center">
+                <span class="material-symbols-outlined text-[20px]">payments</span>
               </div>
-              <div
-                class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm"
-              >
-                <span
-                  class="material-symbols-outlined text-[24px]"
-                  data-icon="groups">groups</span
-                >
+              <div>
+                <p class="text-[22px] font-semibold text-on-surface leading-tight">{fmtINR(totalRevenue)}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">Total Revenue</p>
               </div>
             </div>
           </div>
-          <!-- Stat 2 -->
-          <div
-            class="bg-gradient-to-br from-[#34d399] to-[#059669] p-6 rounded-xl text-white shadow-sm flex flex-col justify-center min-h-[120px] hover:shadow-md transition-shadow"
-          >
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-display-lg text-display-lg font-bold">
-                  {projectsCount}
-                </p>
-                <p class="font-body-md text-body-md opacity-90">Projects</p>
+          <div class="bg-white p-5 rounded-lg border border-outline-variant shadow-xs">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-[#dbeafe] text-[#1d4ed8] flex items-center justify-center">
+                <span class="material-symbols-outlined text-[20px]">groups</span>
               </div>
-              <div
-                class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm"
-              >
-                <span
-                  class="material-symbols-outlined text-[24px]"
-                  data-icon="folder_open">folder_open</span
-                >
+              <div>
+                <p class="text-[22px] font-semibold text-on-surface leading-tight">{clientsCount}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">Clients</p>
               </div>
             </div>
           </div>
-          <!-- Stat 3 -->
-          <div
-            class="bg-gradient-to-br from-[#fb923c] to-[#ea580c] p-6 rounded-xl text-white shadow-sm flex flex-col justify-center min-h-[120px] hover:shadow-md transition-shadow"
-          >
-            <div class="flex items-center justify-between">
-              <div>
-                <p class="font-display-lg text-display-lg font-bold">
-                  {invoicesPendingCount}
-                </p>
-                <p class="font-body-md text-body-md opacity-90">
-                  Invoices Pending
-                </p>
+          <div class="bg-white p-5 rounded-lg border border-outline-variant shadow-xs">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-[#d1fae5] text-[#059669] flex items-center justify-center">
+                <span class="material-symbols-outlined text-[20px]">folder_open</span>
               </div>
-              <div
-                class="w-12 h-12 bg-white/20 rounded-full flex items-center justify-center backdrop-blur-sm"
-              >
-                <span
-                  class="material-symbols-outlined text-[24px]"
-                  data-icon="receipt_long">receipt_long</span
-                >
+              <div>
+                <p class="text-[22px] font-semibold text-on-surface leading-tight">{projectsCount}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">Projects</p>
+              </div>
+            </div>
+          </div>
+          <div class="bg-white p-5 rounded-lg border border-outline-variant shadow-xs">
+            <div class="flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-[#fee2e2] text-[#dc2626] flex items-center justify-center">
+                <span class="material-symbols-outlined text-[20px]">receipt_long</span>
+              </div>
+              <div>
+                <p class="text-[22px] font-semibold text-on-surface leading-tight">{invoicesPendingCount}</p>
+                <p class="text-xs text-on-surface-variant mt-0.5">Pending Invoices</p>
               </div>
             </div>
           </div>
@@ -409,43 +354,32 @@
 
         <!-- Kanban Board -->
         <div
-          class="flex gap-gutter overflow-x-auto pb-4 h-[calc(100vh-420px)] min-h-[400px]"
+          class="flex gap-4 overflow-x-auto pb-4 h-[calc(100vh-380px)] min-h-[400px]"
         >
           {#each columns as column}
-            <!-- Column -->
             <div
-              class="flex-none w-[320px] bg-surface-container-low rounded-xl p-4 flex flex-col transition-all duration-200 {column.id ===
-              'done'
-                ? 'opacity-75 hover:opacity-90'
-                : ''}"
+              class="flex-none w-[300px] bg-surface-container-low rounded-lg p-3 flex flex-col {column.id === 'done' ? 'opacity-70' : ''}"
               ondragover={(e) => e.preventDefault()}
               ondrop={(e) => handleDrop(e, column.id)}
             >
-              <div class="flex justify-between items-center mb-4 px-2">
-                <h3
-                  class="font-title-md text-title-md font-semibold text-on-surface"
-                >
+              <div class="flex justify-between items-center mb-3 px-1">
+                <h3 class="text-sm font-medium text-on-surface">
                   {column.title}
                 </h3>
-                <span
-                  class="bg-surface-variant text-on-surface-variant px-2 py-1 rounded-full font-label-md text-label-md"
-                  >{column.tasks.length}</span
-                >
+                <span class="text-xs text-on-surface-variant bg-surface-container-high px-2 py-0.5 rounded-full">{column.tasks.length}</span>
               </div>
 
-              <div class="flex flex-col gap-4 overflow-y-auto pr-2 pb-2 flex-1">
+              <div class="flex flex-col gap-2 overflow-y-auto pr-1 pb-2 flex-1">
                 {#each column.tasks as task (task.id)}
-                  <!-- Task Card -->
                   <div
-                    class="bg-surface p-4 rounded-xl shadow-[0px_4px_20px_rgba(0,0,0,0.05)] hover:shadow-[0px_10px_25px_rgba(0,0,0,0.08)] hover:-translate-y-1 transition-all duration-200 cursor-grab active:cursor-grabbing border border-outline-variant/30 select-none"
+                    class="bg-white p-3.5 rounded-lg border border-outline-variant shadow-xs hover:shadow-sm transition-shadow cursor-grab active:cursor-grabbing select-none"
                     draggable="true"
                     ondragstart={(e) => handleDragStart(e, task.id)}
                     onclick={() => (selectedTask = task)}
                   >
-                    <!-- Priority + Category badges -->
-                    <div class="flex items-center gap-2 mb-3 flex-wrap">
+                    <div class="flex items-center gap-1.5 mb-2 flex-wrap">
                       <span
-                        class="inline-block px-2 py-1 rounded font-label-md text-label-md {priorityConfig[
+                        class="inline-block px-1.5 py-0.5 rounded text-[11px] font-medium {priorityConfig[
                           task.priority
                         ]?.cls || priorityConfig['medium'].cls}"
                       >
@@ -453,7 +387,7 @@
                       </span>
                       {#if task.category}
                         <span
-                          class="inline-block px-2 py-1 rounded font-label-md text-label-md bg-[#eff6ff] text-[#2563eb]"
+                          class="inline-block px-1.5 py-0.5 rounded text-[11px] font-medium bg-[#eff6ff] text-[#2563eb]"
                         >
                           {task.category}
                         </span>
@@ -461,7 +395,7 @@
                     </div>
 
                     <h4
-                      class="font-title-md text-title-md font-semibold text-on-surface mb-2 {column.id ===
+                      class="text-sm font-medium text-on-surface mb-1 {column.id ===
                       'done'
                         ? 'line-through text-outline'
                         : ''}"
@@ -471,7 +405,7 @@
 
                     {#if task.description}
                       <p
-                        class="font-body-md text-body-md text-on-surface-variant line-clamp-2 mb-3"
+                        class="text-[13px] text-on-surface-variant line-clamp-2 mb-2"
                       >
                         {task.description}
                       </p>
@@ -494,25 +428,18 @@
                   </div>
                 {:else}
                   <div
-                    class="flex flex-col items-center justify-center py-12 border-2 border-dashed border-outline-variant/40 rounded-xl text-outline-variant text-center px-4 flex-1"
+                    class="flex flex-col items-center justify-center py-10 border border-dashed border-outline-variant rounded-lg text-center px-4 flex-1"
                   >
-                    <span class="material-symbols-outlined text-4xl mb-2"
-                      >task</span
-                    >
-                    <p class="text-xs font-semibold mb-1">No tasks yet</p>
-                    <p class="text-[10px] text-outline mb-3">
-                      Click Add Task to create one.
-                    </p>
+                    <span class="material-symbols-outlined text-[28px] text-outline-variant mb-2">task</span>
+                    <p class="text-sm text-on-surface-variant mb-3">No tasks yet</p>
                     <button
-                      class="px-4 py-2 bg-primary text-on-primary rounded-lg text-xs font-semibold hover:bg-primary/90 transition-colors flex items-center gap-1 focus:outline-none"
+                      class="px-3 py-1.5 bg-primary text-white rounded-md text-xs font-medium hover:bg-primary-hover transition-colors flex items-center gap-1 focus:outline-none"
                       onclick={() => {
                         newTaskColumn = column.id;
                         isModalOpen = true;
                       }}
                     >
-                      <span class="material-symbols-outlined text-[16px]"
-                        >add</span
-                      > Add Task
+                      <span class="material-symbols-outlined text-[16px]">add</span> Add Task
                     </button>
                   </div>
                 {/each}
@@ -527,58 +454,24 @@
             onBack={() => (selectedProjectId = null)}
           />
         {:else}
-          <div class="space-y-stack-md animate-fadeIn">
-            <!-- Hero Section -->
-            <section
-              class="rounded-xl p-8 flex flex-col md:flex-row justify-between items-start md:items-center text-on-primary shadow-lg relative overflow-hidden"
-              style="background: linear-gradient(135deg, #630ed4 0%, #d2bbff 100%);"
-            >
-              <!-- Decorative background element -->
-              <div
-                class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"
-              />
-              <div class="z-10 mb-6 md:mb-0">
-                <h1
-                  class="font-headline-lg text-headline-lg-mobile md:text-headline-lg font-bold mb-2"
-                >
-                  Projects
-                </h1>
-                <p
-                  class="font-body-lg text-body-lg text-on-primary/90 flex items-center gap-2"
-                >
-                  <span class="font-bold text-xl">{projectsData.length}</span> Active
-                  Projects
-                </p>
+          <div class="space-y-5 animate-fadeIn">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+              <div>
+                <h1 class="text-xl font-semibold text-on-surface mb-1">Projects</h1>
+                <p class="text-sm text-on-surface-variant">{projectsData.length} active projects</p>
               </div>
-              <button
-                class="z-10 bg-secondary-container text-on-secondary font-label-md text-label-md px-6 py-3 rounded-lg flex items-center gap-2 hover:-translate-y-0.5 hover:shadow-lg transition-all active:scale-95 focus:outline-none"
-              >
-                <span class="material-symbols-outlined" data-icon="add"
-                  >add</span
-                >
+              <button class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 w-fit">
+                <span class="material-symbols-outlined text-[18px]">add</span>
                 New Project
               </button>
-            </section>
+            </div>
 
-            <!-- Filters -->
-            <section class="flex gap-3 overflow-x-auto pb-2 scrollbar-hide">
-              <button
-                class="px-5 py-2 rounded-full font-label-md text-label-md bg-primary-container text-on-primary-container whitespace-nowrap transition-colors focus:outline-none"
-                >All</button
-              >
-              <button
-                class="px-5 py-2 rounded-full font-label-md text-label-md bg-surface-container-high text-on-surface-variant hover:bg-surface-variant whitespace-nowrap transition-colors focus:outline-none"
-                >Active</button
-              >
-              <button
-                class="px-5 py-2 rounded-full font-label-md text-label-md bg-surface-container-high text-on-surface-variant hover:bg-surface-variant whitespace-nowrap transition-colors focus:outline-none"
-                >Completed</button
-              >
-              <button
-                class="px-5 py-2 rounded-full font-label-md text-label-md bg-surface-container-high text-on-surface-variant hover:bg-surface-variant whitespace-nowrap transition-colors focus:outline-none"
-                >On Hold</button
-              >
-            </section>
+            <div class="flex gap-2 overflow-x-auto pb-1">
+              <button class="px-3 py-1.5 rounded-md text-[13px] font-medium bg-primary/[0.08] text-primary whitespace-nowrap transition-colors focus:outline-none">All</button>
+              <button class="px-3 py-1.5 rounded-md text-[13px] font-medium text-on-surface-variant hover:bg-surface-container whitespace-nowrap transition-colors focus:outline-none">Active</button>
+              <button class="px-3 py-1.5 rounded-md text-[13px] font-medium text-on-surface-variant hover:bg-surface-container whitespace-nowrap transition-colors focus:outline-none">Completed</button>
+              <button class="px-3 py-1.5 rounded-md text-[13px] font-medium text-on-surface-variant hover:bg-surface-container whitespace-nowrap transition-colors focus:outline-none">On Hold</button>
+            </div>
 
             <!-- Projects Grid -->
             <section
@@ -601,127 +494,50 @@
           />
         {:else}
           <!-- Client Directory -->
-          <!-- Hero Card -->
-          <section
-            class="rounded-xl overflow-hidden shadow-lg mb-stack-md bg-gradient-to-br from-primary to-secondary p-8 md:p-12 relative flex flex-col md:flex-row items-center justify-between gap-6 group hover:-translate-y-1 transition-transform duration-300"
-          >
-            <div
-              class="absolute inset-0 bg-white/5 opacity-50 pointer-events-none"
-            />
-            <div class="relative z-10 flex-1 w-full text-center md:text-left">
-              <h1 class="font-display-lg text-display-lg text-white mb-2">
-                Client Directory
-              </h1>
-              <p class="font-body-lg text-body-lg text-white/90">
-                Manage your client relationships
-              </p>
-              <div
-                class="mt-6 inline-flex items-end gap-3 bg-white/10 backdrop-blur-md px-6 py-4 rounded-lg border border-white/20"
-              >
-                <span
-                  class="font-display-lg text-display-lg text-white leading-none"
-                  >142</span
-                >
-                <span
-                  class="font-label-md text-label-md text-white/80 uppercase tracking-wider pb-1"
-                  >Total Clients</span
-                >
-              </div>
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5">
+            <div>
+              <h1 class="text-xl font-semibold text-on-surface mb-1">Clients</h1>
+              <p class="text-sm text-on-surface-variant">{clientsCount} total clients</p>
             </div>
-            <div
-              class="relative z-10 w-full md:w-auto mt-6 md:mt-0 flex justify-center md:justify-end"
-            >
-              <button
-                class="bg-[#10b981] hover:bg-[#059669] text-white font-title-md text-title-md px-8 py-4 rounded-lg shadow-md transition-all duration-200 active:scale-95 flex items-center gap-2 w-full md:w-auto justify-center"
-              >
-                <span class="material-symbols-outlined">add</span>
-                Add Client
-              </button>
-            </div>
-          </section>
+            <button class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 w-fit">
+              <span class="material-symbols-outlined text-[18px]">add</span>
+              Add Client
+            </button>
+          </div>
 
-          <!-- Stats Overview Cards -->
-          <section
-            class="grid grid-cols-1 md:grid-cols-2 gap-gutter mb-stack-lg"
-          >
-            <div
-              class="bg-surface rounded-xl p-6 shadow-sm border-l-4 border-secondary-container flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer group"
-            >
-              <div>
-                <p
-                  class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-1"
-                >
-                  Active Projects
-                </p>
-                <p
-                  class="font-headline-lg text-headline-lg text-on-surface group-hover:text-secondary-container transition-colors"
-                >
-                  38
-                </p>
+          <!-- Stats Row -->
+          <div class="grid grid-cols-1 md:grid-cols-2 gap-4 mb-5">
+            <div class="bg-white p-4 rounded-lg border border-outline-variant shadow-xs flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-[#dbeafe] text-[#1d4ed8] flex items-center justify-center">
+                <span class="material-symbols-outlined text-[20px]">folder_open</span>
               </div>
-              <div
-                class="w-12 h-12 rounded-full bg-secondary-container/10 flex items-center justify-center text-secondary-container"
-              >
-                <span
-                  class="material-symbols-outlined"
-                  style="font-variation-settings: 'FILL' 1;">folder_open</span
-                >
+              <div>
+                <p class="text-lg font-semibold text-on-surface">{projectsCount}</p>
+                <p class="text-xs text-on-surface-variant">Active Projects</p>
               </div>
             </div>
-            <div
-              class="bg-surface rounded-xl p-6 shadow-sm border-l-4 border-tertiary-container flex items-center justify-between hover:-translate-y-1 hover:shadow-md transition-all duration-200 cursor-pointer group"
-            >
-              <div>
-                <p
-                  class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-1"
-                >
-                  Recent Activities
-                </p>
-                <p
-                  class="font-headline-lg text-headline-lg text-on-surface group-hover:text-tertiary-container transition-colors"
-                >
-                  12
-                </p>
+            <div class="bg-white p-4 rounded-lg border border-outline-variant shadow-xs flex items-center gap-3">
+              <div class="w-9 h-9 rounded-lg bg-[#fef3c7] text-[#b45309] flex items-center justify-center">
+                <span class="material-symbols-outlined text-[20px]">chat</span>
               </div>
-              <div
-                class="w-12 h-12 rounded-full bg-tertiary-container/10 flex items-center justify-center text-tertiary-container"
-              >
-                <span
-                  class="material-symbols-outlined"
-                  style="font-variation-settings: 'FILL' 1;">history</span
-                >
+              <div>
+                <p class="text-lg font-semibold text-on-surface">{$agencyDataStore.messages.filter(m => !m.is_read && m.sender_type === 'client').length}</p>
+                <p class="text-xs text-on-surface-variant">Unread Messages</p>
               </div>
             </div>
-          </section>
+          </div>
 
-          <!-- Controls / Search & Filters -->
-          <section
-            class="mb-stack-md flex flex-col md:flex-row gap-4 items-center justify-between bg-surface p-4 rounded-xl shadow-sm border border-outline-variant/30"
-          >
+          <!-- Search -->
+          <div class="mb-5 flex flex-col md:flex-row gap-3 items-center">
             <div class="relative w-full flex-1">
-              <span
-                class="material-symbols-outlined absolute left-4 top-1/2 -translate-y-1/2 text-on-surface-variant"
-                >search</span
-              >
+              <span class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-on-surface-variant text-[20px]">search</span>
               <input
-                class="w-full pl-12 pr-4 py-3 bg-surface-container-low border border-outline-variant rounded-lg font-body-md text-body-md focus:outline-none focus:ring-2 focus:ring-primary focus:border-transparent transition-shadow text-on-surface placeholder:text-on-surface-variant"
-                placeholder="Search clients by name, company, or email..."
+                class="w-full pl-10 pr-4 py-2 bg-white border border-outline-variant rounded-lg text-sm focus:outline-none focus:ring-2 focus:ring-primary/20 focus:border-primary transition text-on-surface placeholder:text-on-surface-variant"
+                placeholder="Search clients..."
                 type="text"
               />
             </div>
-            <div class="flex gap-3 w-full md:w-auto">
-              <button
-                class="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-surface-container hover:bg-surface-variant text-on-surface rounded-lg font-title-md text-title-md border border-outline-variant transition-colors"
-              >
-                <span class="material-symbols-outlined">filter_list</span> Filter
-              </button>
-              <button
-                class="flex-1 md:flex-none flex items-center justify-center gap-2 px-6 py-3 bg-surface-container hover:bg-surface-variant text-on-surface rounded-lg font-title-md text-title-md border border-outline-variant transition-colors"
-              >
-                <span class="material-symbols-outlined">download</span> Export
-              </button>
-            </div>
-          </section>
+          </div>
 
           <!-- Client Grid -->
           <section
@@ -767,183 +583,58 @@
           </div>
         {/if}
       {:else if activeTab === "Files"}
-        <div class="space-y-stack-md animate-fadeIn">
-          <!-- Hero Card -->
-          <section
-            class="relative rounded-xl overflow-hidden mb-stack-md bg-gradient-to-r from-primary to-pink-500 shadow-[0px_10px_25px_rgba(99,14,212,0.15)] text-white p-8"
-          >
-            <div
-              class="relative z-10 flex flex-col md:flex-row md:items-center justify-between gap-6"
-            >
-              <div>
-                <h2
-                  class="font-display-lg text-display-lg md:text-display-lg mb-2 text-white"
-                >
-                  Files
-                </h2>
-                <p class="font-body-lg text-body-lg text-white/80">
-                  Manage, share, and organize all your client assets securely.
-                  Currently storing 1,248 files.
-                </p>
-              </div>
-              <button
-                class="bg-[#10b981] hover:bg-[#059669] text-white px-6 py-3 rounded-lg font-title-md text-title-md shadow-lg transition-all active:scale-[0.98] flex items-center gap-2 whitespace-nowrap focus:outline-none"
-              >
-                <span class="material-symbols-outlined">upload</span>
-                Upload File
-              </button>
+        <div class="space-y-5 animate-fadeIn">
+          <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-1">
+            <div>
+              <h1 class="text-xl font-semibold text-on-surface mb-1">Files</h1>
+              <p class="text-sm text-on-surface-variant">{allFilesRaw.length} files stored</p>
             </div>
-            <!-- Decorative abstract shapes -->
-            <div
-              class="absolute top-0 right-0 w-64 h-64 bg-white/10 rounded-full blur-3xl -translate-y-1/2 translate-x-1/4 pointer-events-none"
-            />
-            <div
-              class="absolute bottom-0 left-1/2 w-48 h-48 bg-purple-900/20 rounded-full blur-2xl translate-y-1/2 pointer-events-none"
-            />
-          </section>
+            <button class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 w-fit">
+              <span class="material-symbols-outlined text-[18px]">upload</span>
+              Upload File
+            </button>
+          </div>
 
-          <!-- Quick Folders -->
-          <section class="mb-stack-lg">
-            <div class="flex items-center justify-between mb-stack-sm">
-              <h3 class="font-title-md text-title-md text-on-surface">
-                Quick Access Folders
-              </h3>
-              <button
-                class="font-label-md text-label-md text-primary hover:underline focus:outline-none"
-                >View All</button
-              >
-            </div>
-            <div class="grid grid-cols-2 md:grid-cols-5 gap-gutter">
-              <!-- Purple Folder -->
-              <div
-                class="bg-surface border border-outline-variant/30 rounded-xl p-4 shadow-sm hover:shadow-[0px_10px_25px_rgba(0,0,0,0.08)] transition-all cursor-pointer group hover:-translate-y-1"
-              >
-                <div
-                  class="w-12 h-12 rounded-lg bg-primary-container/30 flex items-center justify-center mb-3 group-hover:bg-primary-container transition-colors"
-                >
-                  <span
-                    class="material-symbols-outlined text-primary text-3xl"
-                    style="font-variation-settings: 'FILL' 1;">folder</span
-                  >
+          <section class="mb-5">
+            <h3 class="text-sm font-medium text-on-surface mb-3">Folders</h3>
+            <div class="grid grid-cols-2 md:grid-cols-5 gap-3">
+              {#each [
+                { name: 'Designs', key: 'designs', icon: 'palette', color: 'text-primary', bg: 'bg-primary/[0.06]' },
+                { name: 'Contracts', key: 'contracts', icon: 'description', color: 'text-secondary', bg: 'bg-secondary/[0.06]' },
+                { name: 'Invoices', key: 'invoices', icon: 'receipt_long', color: 'text-success', bg: 'bg-success/[0.06]' },
+                { name: 'Reports', key: 'reports', icon: 'assessment', color: 'text-tertiary', bg: 'bg-tertiary/[0.06]' },
+                { name: 'Brand Assets', key: 'brand_assets', icon: 'brush', color: 'text-error', bg: 'bg-error/[0.06]' }
+              ] as folder (folder.key)}
+              <div class="bg-white border border-outline-variant rounded-lg p-3.5 shadow-xs hover:shadow-sm transition-shadow cursor-pointer">
+                <div class="w-9 h-9 rounded-lg {folder.bg} flex items-center justify-center mb-2.5">
+                  <span class="material-symbols-outlined {folder.color} text-[18px]" style="font-variation-settings: 'FILL' 1;">{folder.icon}</span>
                 </div>
-                <h4 class="font-title-md text-title-md text-on-surface mb-1">
-                  Designs
-                </h4>
-                <p class="font-label-md text-label-md text-on-surface-variant">
-                  248 Files
-                </p>
+                <h4 class="text-sm font-medium text-on-surface mb-0.5">{folder.name}</h4>
+                <p class="text-xs text-on-surface-variant">{folderCount(folder.key)} files</p>
               </div>
-              <!-- Blue Folder -->
-              <div
-                class="bg-surface border border-outline-variant/30 rounded-xl p-4 shadow-sm hover:shadow-[0px_10px_25px_rgba(0,0,0,0.08)] transition-all cursor-pointer group hover:-translate-y-1"
-              >
-                <div
-                  class="w-12 h-12 rounded-lg bg-secondary-container/30 flex items-center justify-center mb-3 group-hover:bg-secondary-container transition-colors"
-                >
-                  <span
-                    class="material-symbols-outlined text-secondary text-3xl"
-                    style="font-variation-settings: 'FILL' 1;">folder</span
-                  >
-                </div>
-                <h4 class="font-title-md text-title-md text-on-surface mb-1">
-                  Contracts
-                </h4>
-                <p class="font-label-md text-label-md text-on-surface-variant">
-                  112 Files
-                </p>
-              </div>
-              <!-- Green Folder -->
-              <div
-                class="bg-surface border border-outline-variant/30 rounded-xl p-4 shadow-sm hover:shadow-[0px_10px_25px_rgba(0,0,0,0.08)] transition-all cursor-pointer group hover:-translate-y-1"
-              >
-                <div
-                  class="w-12 h-12 rounded-lg bg-emerald-100 flex items-center justify-center mb-3 group-hover:bg-emerald-200 transition-colors"
-                >
-                  <span
-                    class="material-symbols-outlined text-emerald-600 text-3xl"
-                    style="font-variation-settings: 'FILL' 1;">folder</span
-                  >
-                </div>
-                <h4 class="font-title-md text-title-md text-on-surface mb-1">
-                  Invoices
-                </h4>
-                <p class="font-label-md text-label-md text-on-surface-variant">
-                  542 Files
-                </p>
-              </div>
-              <!-- Orange Folder -->
-              <div
-                class="bg-surface border border-outline-variant/30 rounded-xl p-4 shadow-sm hover:shadow-[0px_10px_25px_rgba(0,0,0,0.08)] transition-all cursor-pointer group hover:-translate-y-1"
-              >
-                <div
-                  class="w-12 h-12 rounded-lg bg-orange-100 flex items-center justify-center mb-3 group-hover:bg-orange-200 transition-colors"
-                >
-                  <span
-                    class="material-symbols-outlined text-orange-600 text-3xl"
-                    style="font-variation-settings: 'FILL' 1;">folder</span
-                  >
-                </div>
-                <h4 class="font-title-md text-title-md text-on-surface mb-1">
-                  Reports
-                </h4>
-                <p class="font-label-md text-label-md text-on-surface-variant">
-                  89 Files
-                </p>
-              </div>
-              <!-- Pink Folder -->
-              <div
-                class="bg-surface border border-outline-variant/30 rounded-xl p-4 shadow-sm hover:shadow-[0px_10px_25px_rgba(0,0,0,0.08)] transition-all cursor-pointer group hover:-translate-y-1"
-              >
-                <div
-                  class="w-12 h-12 rounded-lg bg-pink-100 flex items-center justify-center mb-3 group-hover:bg-pink-200 transition-colors"
-                >
-                  <span
-                    class="material-symbols-outlined text-pink-600 text-3xl"
-                    style="font-variation-settings: 'FILL' 1;">folder</span
-                  >
-                </div>
-                <h4 class="font-title-md text-title-md text-on-surface mb-1">
-                  Brand Assets
-                </h4>
-                <p class="font-label-md text-label-md text-on-surface-variant">
-                  67 Files
-                </p>
-              </div>
+              {/each}
             </div>
           </section>
 
-          <!-- Recent Files Grid -->
           <section>
-            <div
-              class="flex flex-col md:flex-row md:items-center justify-between mb-stack-md gap-4"
-            >
-              <h3 class="font-headline-md text-headline-md text-on-surface">
-                Recent Files
-              </h3>
-              <!-- Filter/Search Bar -->
-              <div class="flex items-center gap-3">
-                <div class="relative w-full md:w-64">
-                  <span
-                    class="material-symbols-outlined absolute left-3 top-1/2 -translate-y-1/2 text-outline"
-                    >search</span
-                  >
+            <div class="flex flex-col md:flex-row md:items-center justify-between mb-4 gap-3">
+              <h3 class="text-sm font-medium text-on-surface">Recent Files</h3>
+              <div class="flex items-center gap-2">
+                <div class="relative w-full md:w-56">
+                  <span class="material-symbols-outlined absolute left-2.5 top-1/2 -translate-y-1/2 text-outline text-[18px]">search</span>
                   <input
-                    class="w-full pl-10 pr-4 py-2 bg-surface border border-outline-variant rounded-lg font-body-md text-body-md focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-all placeholder:text-outline-variant"
+                    class="w-full pl-9 pr-3 py-1.5 bg-white border border-outline-variant rounded-lg text-sm focus:border-primary focus:ring-1 focus:ring-primary outline-none transition-colors placeholder:text-outline"
                     placeholder="Search files..."
                     type="text"
                   />
                 </div>
-                <button
-                  class="p-2 border border-outline-variant rounded-lg text-on-surface-variant hover:bg-surface-variant transition-colors flex items-center justify-center focus:outline-none"
-                >
-                  <span class="material-symbols-outlined">filter_list</span>
+                <button class="p-1.5 border border-outline-variant rounded-lg text-on-surface-variant hover:bg-surface-container-low transition-colors flex items-center justify-center">
+                  <span class="material-symbols-outlined text-[18px]">filter_list</span>
                 </button>
               </div>
             </div>
 
-            <div
-              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-gutter"
-            >
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-3">
               {#each filesData as file (file.id)}
                 <FileCard {file} />
               {/each}
@@ -951,110 +642,64 @@
           </section>
         </div>
       {:else if activeTab === "Invoices"}
-        {#if isCreatingInvoice}
-          <CreateInvoice onCancel={() => (isCreatingInvoice = false)} />
-        {:else}
-          <div class="space-y-stack-md animate-fadeIn">
-            <!-- Hero Card -->
-            <div
-              class="rounded-xl p-8 mb-stack-md text-on-primary shadow-lg relative overflow-hidden flex flex-col md:flex-row justify-between items-start md:items-center gap-6"
-              style="background: linear-gradient(135deg, #630ed4 0%, #ec4899 100%);"
-            >
-              <div
-                class="absolute inset-0 opacity-20 pointer-events-none"
-                style="background-image: radial-gradient(circle at 100% 0%, #ffffff 0%, transparent 50%);"
-              />
-              <div class="relative z-10">
-                <h1 class="font-headline-lg text-headline-lg mb-2 text-white">
-                  Invoices
-                </h1>
-                <p class="font-body-md text-body-md opacity-90 mb-1 text-white">
-                  Total Revenue
-                </p>
-                <div
-                  class="font-display-lg text-display-lg tracking-tight text-white"
-                >
-                  ₹2,40,000
-                </div>
+          <div class="space-y-5 animate-fadeIn">
+            <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-1">
+              <div>
+                <h1 class="text-xl font-semibold text-on-surface mb-1">Invoices</h1>
+                <p class="text-sm text-on-surface-variant">Total revenue: {fmtINR($agencyDataStore.invoices.reduce((s, i) => s + Number(i.total || 0), 0))}</p>
               </div>
-              <button
-                class="relative z-10 bg-[#10b981] hover:bg-[#059669] text-white px-6 py-3 rounded-lg font-title-md text-title-md shadow-md transition-all hover:shadow-lg active:scale-95 flex items-center gap-2 focus:outline-none"
-                onclick={() => (isCreatingInvoice = true)}
+              <a
+                href="/invoices/create"
+                class="bg-primary hover:bg-primary-hover text-white px-4 py-2 rounded-lg text-sm font-medium transition-colors flex items-center gap-1.5 w-fit no-underline"
               >
-                <span class="material-symbols-outlined text-lg">add</span>
+                <span class="material-symbols-outlined text-[18px]">add</span>
                 Create Invoice
-              </button>
+              </a>
             </div>
 
-            <!-- Stat Cards -->
-            <div class="grid grid-cols-1 md:grid-cols-3 gap-gutter mb-stack-md">
-              <div
-                class="bg-surface rounded-lg p-6 shadow-[0_4px_20px_rgba(0,0,0,0.05)] border-l-4 border-[#10b981] flex flex-col"
-              >
-                <span
-                  class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-2"
-                  >Paid</span
-                >
-                <span class="font-headline-md text-headline-md text-[#10b981]"
-                  >₹2,10,500</span
-                >
+            <div class="grid grid-cols-3 gap-3">
+              <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-7 h-7 rounded-lg bg-success/[0.08] flex items-center justify-center">
+                    <span class="material-symbols-outlined text-success text-[16px]">check_circle</span>
+                  </div>
+                  <span class="text-xs text-on-surface-variant">Paid</span>
+                </div>
+                <span class="text-[15px] font-semibold text-on-surface">{fmtINR($agencyDataStore.invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total || 0), 0))}</span>
               </div>
-              <div
-                class="bg-surface rounded-lg p-6 shadow-[0_4px_20px_rgba(0,0,0,0.05)] border-l-4 border-[#f59e0b] flex flex-col"
-              >
-                <span
-                  class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-2"
-                  >Pending</span
-                >
-                <span class="font-headline-md text-headline-md text-[#f59e0b]"
-                  >₹29,500</span
-                >
+              <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-7 h-7 rounded-lg bg-tertiary/[0.08] flex items-center justify-center">
+                    <span class="material-symbols-outlined text-tertiary text-[16px]">schedule</span>
+                  </div>
+                  <span class="text-xs text-on-surface-variant">Pending</span>
+                </div>
+                <span class="text-[15px] font-semibold text-on-surface">{fmtINR($agencyDataStore.invoices.filter(i => i.status === 'pending').reduce((s, i) => s + Number(i.total || 0), 0))}</span>
               </div>
-              <div
-                class="bg-surface rounded-lg p-6 shadow-[0_4px_20px_rgba(0,0,0,0.05)] border-l-4 border-error flex flex-col"
-              >
-                <span
-                  class="font-label-md text-label-md text-on-surface-variant uppercase tracking-wider mb-2"
-                  >Overdue</span
-                >
-                <span class="font-headline-md text-headline-md text-error"
-                  >₹11,800</span
-                >
+              <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+                <div class="flex items-center gap-2 mb-2">
+                  <div class="w-7 h-7 rounded-lg bg-error/[0.08] flex items-center justify-center">
+                    <span class="material-symbols-outlined text-error text-[16px]">warning</span>
+                  </div>
+                  <span class="text-xs text-on-surface-variant">Overdue</span>
+                </div>
+                <span class="text-[15px] font-semibold text-on-surface">{fmtINR($agencyDataStore.invoices.filter(i => i.status === 'overdue').reduce((s, i) => s + Number(i.total || 0), 0))}</span>
               </div>
             </div>
 
-            <!-- Filters -->
-            <div
-              class="flex items-center gap-3 mb-stack-md overflow-x-auto pb-2 scrollbar-hide"
-            >
-              <button
-                class="bg-primary text-on-primary px-4 py-2 rounded-full font-label-md text-label-md whitespace-nowrap transition-colors focus:outline-none"
-                >All</button
-              >
-              <button
-                class="bg-surface-variant text-on-surface-variant hover:bg-surface-dim px-4 py-2 rounded-full font-label-md text-label-md whitespace-nowrap transition-colors focus:outline-none"
-                >Paid</button
-              >
-              <button
-                class="bg-surface-variant text-on-surface-variant hover:bg-surface-dim px-4 py-2 rounded-full font-label-md text-label-md whitespace-nowrap transition-colors focus:outline-none"
-                >Pending</button
-              >
-              <button
-                class="bg-surface-variant text-on-surface-variant hover:bg-surface-dim px-4 py-2 rounded-full font-label-md text-label-md whitespace-nowrap transition-colors focus:outline-none"
-                >Overdue</button
-              >
+            <div class="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1">
+              <button class="bg-primary text-white px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">All</button>
+              <button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">Paid</button>
+              <button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">Pending</button>
+              <button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">Overdue</button>
             </div>
 
-            <!-- Invoice Grid -->
-            <div
-              class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-gutter"
-            >
+            <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-3">
               {#each invoicesData as invoice (invoice.id)}
                 <InvoiceCard {invoice} />
               {/each}
             </div>
           </div>
-        {/if}
       {:else if activeTab === "Settings"}
         <Settings />
       {/if}
@@ -1063,23 +708,16 @@
     <Messages />
   {/if}
 
-  <!-- "New Project" / Task Modal -->
   {#if isModalOpen}
-    <div
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-    >
-      <div
-        class="bg-surface-container-lowest w-full max-w-md rounded-2xl p-6 shadow-2xl border border-outline-variant/40 mx-4"
-      >
-        <div class="flex justify-between items-center mb-6">
-          <h3 class="font-title-md text-title-md font-bold text-on-surface">
-            Add New Task
-          </h3>
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div class="bg-white w-full max-w-md rounded-lg p-5 shadow-lg border border-outline-variant mx-4 animate-fadeIn">
+        <div class="flex justify-between items-center mb-5">
+          <h3 class="text-[15px] font-semibold text-on-surface">Add New Task</h3>
           <button
-            class="text-on-surface-variant hover:text-primary p-1 rounded-full hover:bg-surface-container"
+            class="text-on-surface-variant hover:text-on-surface w-8 h-8 rounded-lg hover:bg-surface-container flex items-center justify-center"
             onclick={() => (isModalOpen = false)}
           >
-            <span class="material-symbols-outlined block">close</span>
+            <span class="material-symbols-outlined text-[18px]">close</span>
           </button>
         </div>
 
@@ -1167,19 +805,17 @@
             </select>
           </div>
 
-          <div
-            class="flex gap-4 justify-end pt-4 border-t border-outline-variant/30 mt-6"
-          >
+          <div class="flex gap-3 justify-end pt-4 border-t border-outline-variant mt-5">
             <button
               type="button"
-              class="px-4 py-2 text-sm font-semibold text-on-surface-variant hover:bg-surface-container rounded-lg"
+              class="px-4 py-2 text-sm font-medium text-on-surface-variant hover:bg-surface-container rounded-lg transition-colors"
               onclick={() => (isModalOpen = false)}
             >
               Cancel
             </button>
             <button
               type="submit"
-              class="px-5 py-2 text-sm font-semibold text-on-primary bg-primary hover:bg-primary-container rounded-lg shadow-md"
+              class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors"
             >
               Create Task
             </button>
@@ -1189,27 +825,18 @@
     </div>
   {/if}
 
-  <!-- Task Details Modal -->
   {#if selectedTask}
-    <div
-      class="fixed inset-0 z-50 flex items-center justify-center bg-black/50 backdrop-blur-sm"
-    >
-      <div
-        class="bg-surface-container-lowest w-full max-w-md rounded-2xl p-6 shadow-2xl border border-outline-variant/40 mx-4"
-      >
+    <div class="fixed inset-0 z-50 flex items-center justify-center bg-black/40">
+      <div class="bg-white w-full max-w-md rounded-lg p-5 shadow-lg border border-outline-variant mx-4 animate-fadeIn">
         <div class="flex justify-between items-start mb-4">
           <div>
-            <span
-              class="inline-block px-2 py-1 rounded font-label-md text-label-md mb-2 {selectedTask.tagClass}"
-            >
+            <span class="inline-block px-2 py-0.5 rounded text-[11px] font-medium mb-2 {selectedTask.tagClass}">
               {selectedTask.tag}
             </span>
-            <h3 class="font-headline-md text-xl font-bold text-on-surface">
-              {selectedTask.title}
-            </h3>
+            <h3 class="text-[15px] font-semibold text-on-surface">{selectedTask.title}</h3>
           </div>
           <button
-            class="text-on-surface-variant hover:text-primary p-1 rounded-full hover:bg-surface-container"
+            class="text-on-surface-variant hover:text-on-surface w-8 h-8 rounded-lg hover:bg-surface-container flex items-center justify-center"
             onclick={() => (selectedTask = null)}
           >
             <span class="material-symbols-outlined block">close</span>
@@ -1259,9 +886,9 @@
           {/if}
         </div>
 
-        <div class="flex justify-end pt-4 border-t border-outline-variant/30">
+        <div class="flex justify-end pt-4 border-t border-outline-variant">
           <button
-            class="px-5 py-2 text-sm font-semibold text-on-primary bg-primary hover:bg-primary-container rounded-lg shadow-md"
+            class="px-4 py-2 text-sm font-medium text-white bg-primary hover:bg-primary-hover rounded-lg transition-colors"
             onclick={() => (selectedTask = null)}
           >
             Close
@@ -1280,25 +907,12 @@
     width: 100% !important;
     margin: 0 !important;
     padding: 0 !important;
-    background-color: #fef7ff !important;
+    background-color: rgb(var(--c-background)) !important;
     background-image: none !important;
   }
   :global(::-webkit-scrollbar) {
     display: none !important;
     width: 0 !important;
     height: 0 !important;
-  }
-  @keyframes fadeIn {
-    from {
-      opacity: 0;
-      transform: translateY(-5px);
-    }
-    to {
-      opacity: 1;
-      transform: translateY(0);
-    }
-  }
-  .animate-fadeIn {
-    animation: fadeIn 0.2s cubic-bezier(0.16, 1, 0.3, 1) forwards;
   }
 </style>

@@ -1,4 +1,6 @@
 <script lang="ts">
+  import NotificationBell from '$lib/components/NotificationBell.svelte';
+  import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { clientStore } from '$lib/clientStore';
   import { authState } from '$lib/auth.svelte';
@@ -64,6 +66,35 @@
   function fmtAmt(n: number) { return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
   function fmtDate(d: string | null) { return d ? new Date(d).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'; }
   function initials(name: string | null) { return name?.substring(0, 2).toUpperCase() || 'NA'; }
+
+  let toastMsg = $state('');
+  let payingInvoiceId = $state<string | null>(null);
+
+  function showToast(msg: string) {
+    toastMsg = msg;
+    setTimeout(() => toastMsg = '', 3000);
+  }
+
+  async function payWithStripe(invoiceId: string) {
+    payingInvoiceId = invoiceId;
+    try {
+      const res = await apiFetch('/api/stripe/checkout', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ invoice_id: invoiceId }),
+      });
+      const data = await res.json();
+      if (data.url) {
+        window.location.href = data.url;
+      } else {
+        showToast('Could not create payment session.');
+        payingInvoiceId = null;
+      }
+    } catch {
+      showToast('Payment failed. Please try again.');
+      payingInvoiceId = null;
+    }
+  }
 </script>
 
 <svelte:head>
@@ -72,36 +103,38 @@
 
 <div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex overflow-hidden w-full">
   <!-- Top Nav -->
-  <div class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-surface/90 backdrop-blur-xl shadow-sm border-b border-outline-variant/10">
+  <div class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-14 bg-white border-b border-outline-variant">
     <div class="flex items-center gap-8 w-full max-w-container-max mx-auto justify-between">
       <div class="flex items-center gap-8">
         <a href="/client/dashboard" class="flex items-center">
           {#if agencyLogo}
-            <img src={agencyLogo} alt="{agencyName} Logo" class="h-8 max-w-[150px] object-contain" />
+            <img src={agencyLogo} alt="{agencyName} Logo" class="h-7 max-w-[140px] object-contain" />
           {:else}
-            <span class="font-headline-md text-headline-md font-bold text-primary">{agencyName}</span>
+            <span class="text-[15px] font-semibold text-on-surface tracking-tight">{agencyName}</span>
           {/if}
         </a>
-        <nav class="hidden md:flex gap-8">
+        <nav class="hidden md:flex gap-1">
           {#each navTabs as tab}
-            <a href={tabHref(tab)} class="relative font-label-md text-label-md transition-colors duration-150 py-5 focus:outline-none {tab === 'Dashboard' ? 'text-primary border-b-2 border-primary font-bold' : 'text-on-surface-variant hover:text-on-surface'}">{tab}</a>
+            <a href={tabHref(tab)} class="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors {tab === 'Dashboard' ? 'text-primary bg-primary/[0.06]' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}">{tab}</a>
           {/each}
         </nav>
       </div>
-      <div class="flex items-center gap-4">
+      <div class="flex items-center gap-2">
+        <NotificationBell />
         <div class="relative">
-          <button class="flex items-center active:scale-95 transition-transform duration-150 focus:outline-none bg-primary-container text-on-primary-container w-8 h-8 rounded-full border border-outline-variant justify-center font-bold text-xs" onclick={() => userMenuOpen = !userMenuOpen}>
-            {initials($clientStore.full_name)}
+          <button class="flex items-center focus:outline-none" onclick={() => userMenuOpen = !userMenuOpen}>
+            <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">
+              {initials($clientStore.full_name)}
+            </div>
           </button>
           {#if userMenuOpen}
-            <div class="absolute right-0 top-10 w-48 bg-surface-container-lowest border border-outline-variant/50 rounded-xl shadow-lg py-2 z-50">
-              <div class="px-4 py-2 border-b border-outline-variant/30">
-                <p class="text-xs font-semibold text-on-surface">{$clientStore.full_name || 'Client'}</p>
-                <p class="text-[10px] text-outline truncate">{authState.user?.email || ''}</p>
+            <div class="absolute right-0 top-11 w-52 bg-white border border-outline-variant rounded-lg shadow-dropdown py-1 z-50 animate-fadeIn">
+              <div class="px-4 py-2.5 border-b border-outline-variant">
+                <p class="text-sm font-medium text-on-surface">{$clientStore.full_name || 'Client'}</p>
+                <p class="text-xs text-on-surface-variant truncate mt-0.5">{authState.user?.email || ''}</p>
               </div>
-              <hr class="border-outline-variant/30 my-1" />
-              <button class="w-full text-left px-4 py-2 text-xs text-error hover:bg-error-container/20 transition-colors flex items-center gap-2" onclick={handleSignOut}>
-                <span class="material-symbols-outlined text-sm">logout</span> Sign Out
+              <button class="w-full text-left px-4 py-2 text-sm text-error hover:bg-error-container/30 transition-colors flex items-center gap-2" onclick={handleSignOut}>
+                <span class="material-symbols-outlined text-[18px]">logout</span> Sign Out
               </button>
             </div>
           {/if}
@@ -110,174 +143,195 @@
     </div>
   </div>
 
-  <!-- Main Content Area -->
-  <main class="flex-1 overflow-y-auto mt-16 px-margin-desktop py-8 max-w-container-max mx-auto w-full">
+  <main class="flex-1 overflow-y-auto mt-14 px-6 py-6 max-w-container-max mx-auto w-full">
     {#if loading}
-      <div class="py-20 flex justify-center items-center">
-        <div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div>
+      <div>
+        <div class="animate-shimmer rounded-lg h-20 mb-5"></div>
+        <div class="grid grid-cols-3 gap-3 mb-5">
+          {#each Array(3) as _}
+            <div class="bg-white rounded-lg p-4 border border-outline-variant">
+              <div class="h-3 animate-shimmer rounded w-1/2 mb-2"></div>
+              <div class="h-6 animate-shimmer rounded w-1/3"></div>
+            </div>
+          {/each}
+        </div>
       </div>
     {:else}
-      <!-- Hero Section -->
-      <div class="bg-gradient-to-r from-[#7C3AED] to-[#EC4899] rounded-2xl p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-lg mb-8">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 animate-fadeIn">
         <div>
-          <h1 class="font-display-md font-bold mb-2">Welcome, {$clientStore.full_name} 👋</h1>
-          <p class="font-body-md text-white/90">Here is an overview of your active engagements.</p>
+          <h1 class="text-xl font-semibold text-on-surface mb-1">Welcome, {$clientStore.full_name}</h1>
+          <p class="text-sm text-on-surface-variant">Here's an overview of your active engagements.</p>
         </div>
         {#if recentProject}
-          <div class="mt-6 md:mt-0 bg-white/10 backdrop-blur-md rounded-xl p-6 w-full md:w-80 border border-white/20 shadow-md">
+          <div class="bg-white rounded-lg border border-outline-variant shadow-xs p-4 w-full md:w-72">
             <div class="flex justify-between items-end mb-2">
               <div>
-                <span class="text-xs text-white/70 uppercase tracking-wider font-semibold block mb-1">Current Project</span>
-                <h3 class="font-title-md font-bold text-white truncate max-w-[180px]">{recentProject.name}</h3>
+                <span class="text-[11px] text-on-surface-variant">Current Project</span>
+                <h3 class="text-sm font-medium text-on-surface truncate max-w-[160px]">{recentProject.name}</h3>
               </div>
-              <span class="font-title-lg font-bold">{recentProject.progress}%</span>
+              <span class="text-sm font-semibold text-primary">{recentProject.progress}%</span>
             </div>
-            <div class="w-full bg-white/20 h-2 rounded-full overflow-hidden">
-              <div class="bg-white h-full rounded-full transition-all duration-1000" style="width: {recentProject.progress}%;"></div>
+            <div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+              <div class="bg-primary h-full rounded-full" style="width: {recentProject.progress}%;"></div>
             </div>
           </div>
         {/if}
       </div>
 
-      <!-- Stat Cards -->
-      <div class="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
-        <div class="bg-surface border border-[#bfdbfe] rounded-xl p-6 shadow-sm flex items-center justify-between">
-          <div>
-            <p class="text-sm font-semibold text-[#2563eb] uppercase tracking-wider mb-1">Active Projects</p>
-            <h4 class="font-display-sm text-display-sm font-bold text-on-surface">{activeProjectsCount}</h4>
+      <div class="grid grid-cols-3 gap-3 mb-5">
+        <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-7 h-7 rounded-lg bg-secondary/[0.08] flex items-center justify-center">
+              <span class="material-symbols-outlined text-secondary text-[16px]">folder_open</span>
+            </div>
+            <span class="text-xs text-on-surface-variant">Active Projects</span>
           </div>
-          <div class="w-12 h-12 rounded-full bg-[#eff6ff] text-[#2563eb] flex items-center justify-center">
-            <span class="material-symbols-outlined text-2xl">folder_open</span>
-          </div>
+          <span class="text-[15px] font-semibold text-on-surface">{activeProjectsCount}</span>
         </div>
-        <div class="bg-surface border border-[#bbf7d0] rounded-xl p-6 shadow-sm flex items-center justify-between">
-          <div>
-            <p class="text-sm font-semibold text-[#16a34a] uppercase tracking-wider mb-1">Files Uploaded</p>
-            <h4 class="font-display-sm text-display-sm font-bold text-on-surface">{filesCount}</h4>
+        <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-7 h-7 rounded-lg bg-success/[0.08] flex items-center justify-center">
+              <span class="material-symbols-outlined text-success text-[16px]">description</span>
+            </div>
+            <span class="text-xs text-on-surface-variant">Files Uploaded</span>
           </div>
-          <div class="w-12 h-12 rounded-full bg-[#f0fdf4] text-[#16a34a] flex items-center justify-center">
-            <span class="material-symbols-outlined text-2xl">description</span>
-          </div>
+          <span class="text-[15px] font-semibold text-on-surface">{filesCount}</span>
         </div>
-        <div class="bg-surface border border-[#fed7aa] rounded-xl p-6 shadow-sm flex items-center justify-between">
-          <div>
-            <p class="text-sm font-semibold text-[#ea580c] uppercase tracking-wider mb-1">Pending Invoices</p>
-            <h4 class="font-display-sm text-display-sm font-bold text-on-surface">{pendingInvoicesCount}</h4>
+        <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
+          <div class="flex items-center gap-2 mb-2">
+            <div class="w-7 h-7 rounded-lg bg-tertiary/[0.08] flex items-center justify-center">
+              <span class="material-symbols-outlined text-tertiary text-[16px]">receipt_long</span>
+            </div>
+            <span class="text-xs text-on-surface-variant">Pending Invoices</span>
           </div>
-          <div class="w-12 h-12 rounded-full bg-[#fff7ed] text-[#ea580c] flex items-center justify-center">
-            <span class="material-symbols-outlined text-2xl">receipt_long</span>
-          </div>
+          <span class="text-[15px] font-semibold text-on-surface">{pendingInvoicesCount}</span>
         </div>
       </div>
 
-      <!-- 3 Columns Layout -->
-      <div class="grid grid-cols-1 lg:grid-cols-3 gap-6 mb-12">
-        <!-- Column 1: My Projects -->
-        <div class="space-y-4">
-          <h2 class="font-title-lg text-title-lg text-on-surface border-b border-outline-variant/30 pb-2 mb-4">My Projects</h2>
-          {#each activeProjects as project}
-            <div class="bg-surface rounded-xl p-5 shadow-sm border border-outline-variant/30 hover:border-primary/40 transition-colors">
-              <div class="flex justify-between items-start mb-3">
-                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider {project.progress > 0 ? 'bg-[#eff6ff] text-[#2563eb]' : 'bg-surface-variant text-on-surface-variant'}">
-                  {project.progress > 0 ? 'In Progress' : 'Planning'}
-                </span>
-                {#if project.deadline}
-                  <span class="text-xs text-outline font-medium flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">event</span> {fmtDate(project.deadline)}</span>
-                {/if}
+      <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
+        <div>
+          <h2 class="text-sm font-medium text-on-surface mb-3">My Projects</h2>
+          <div class="space-y-3">
+            {#each activeProjects as project}
+              <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant hover:border-primary/30 transition-colors">
+                <div class="flex justify-between items-start mb-2">
+                  <span class="text-[11px] font-medium px-1.5 py-0.5 rounded {project.progress > 0 ? 'bg-secondary/[0.08] text-secondary' : 'bg-surface-container text-on-surface-variant'}">
+                    {project.progress > 0 ? 'In Progress' : 'Planning'}
+                  </span>
+                  {#if project.deadline}
+                    <span class="text-xs text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">event</span> {fmtDate(project.deadline)}</span>
+                  {/if}
+                </div>
+                <h3 class="text-sm font-medium text-on-surface mb-1">{project.name}</h3>
+                <p class="text-[13px] text-on-surface-variant mb-3 line-clamp-2">{project.description || 'No description provided.'}</p>
+                <div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
+                  <div class="bg-primary h-full rounded-full" style="width: {project.progress}%;"></div>
+                </div>
+                <div class="text-right mt-1 text-xs font-medium text-primary">{project.progress}%</div>
               </div>
-              <h3 class="font-title-md text-title-md font-bold text-on-surface mb-1">{project.name}</h3>
-              <p class="text-sm text-on-surface-variant mb-4 line-clamp-2">{project.description || 'No description provided.'}</p>
-              <div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden mt-auto">
-                <div class="bg-primary h-full rounded-full transition-all" style="width: {project.progress}%;"></div>
+            {/each}
+            {#if activeProjects.length === 0}
+              <div class="py-10 text-center border border-dashed border-outline-variant rounded-lg">
+                <span class="material-symbols-outlined text-[28px] text-outline mb-2 block">folder_off</span>
+                <p class="text-sm text-on-surface-variant">No active projects.</p>
               </div>
-              <div class="text-right mt-1 text-xs font-semibold text-primary">{project.progress}%</div>
-            </div>
-          {/each}
-          {#if activeProjects.length === 0}
-            <div class="text-center p-6 bg-surface-container-lowest rounded-xl border border-outline-variant/20 text-on-surface-variant text-sm">
-              No active projects at the moment.
-            </div>
-          {/if}
+            {/if}
+          </div>
         </div>
 
-        <!-- Column 2: Recent Files -->
-        <div class="space-y-4">
-          <h2 class="font-title-lg text-title-lg text-on-surface border-b border-outline-variant/30 pb-2 mb-4">Recent Files</h2>
-          {#each recentFiles as file}
-            {@const fType = getFileType(file.file_name)}
-            {@const icon = iconConfig(fType)}
-            <div class="bg-surface rounded-xl p-4 shadow-sm border border-outline-variant/30 flex items-center gap-4 hover:border-primary/40 transition-colors">
-              <div class="w-12 h-12 rounded-xl {icon.bg} {icon.text} flex items-center justify-center shrink-0">
-                <span class="material-symbols-outlined text-2xl">{icon.icon}</span>
+        <div>
+          <h2 class="text-sm font-medium text-on-surface mb-3">Recent Files</h2>
+          <div class="space-y-3">
+            {#each recentFiles as file}
+              {@const fType = getFileType(file.file_name)}
+              {@const icon = iconConfig(fType)}
+              <div class="bg-white rounded-lg p-3.5 shadow-xs border border-outline-variant flex items-center gap-3">
+                <div class="w-9 h-9 rounded-lg {icon.bg} {icon.text} flex items-center justify-center shrink-0">
+                  <span class="material-symbols-outlined text-[18px]">{icon.icon}</span>
+                </div>
+                <div class="flex-1 min-w-0">
+                  <h3 class="text-sm font-medium text-on-surface truncate mb-0.5">{file.file_name}</h3>
+                  <div class="flex items-center gap-1.5 text-xs text-on-surface-variant">
+                    <span>{formatSize(file.file_size)}</span>
+                    <span class="text-outline">·</span>
+                    <span>{fmtDate(file.created_at)}</span>
+                  </div>
+                </div>
+                <a href={file.file_url} target="_blank" rel="noopener noreferrer" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-colors shrink-0" title="Download">
+                  <span class="material-symbols-outlined text-[18px]">download</span>
+                </a>
               </div>
-              <div class="flex-1 min-w-0">
-                <h3 class="font-title-md text-sm font-bold text-on-surface truncate mb-0.5">{file.file_name}</h3>
-                <div class="flex items-center gap-2 text-xs text-on-surface-variant">
-                  <span>{formatSize(file.file_size)}</span>
-                  <span>•</span>
-                  <span>{fmtDate(file.created_at)}</span>
+            {/each}
+            {#if recentFiles.length === 0}
+              <div class="py-10 text-center border border-dashed border-outline-variant rounded-lg">
+                <span class="material-symbols-outlined text-[28px] text-outline mb-2 block">description</span>
+                <p class="text-sm text-on-surface-variant">No recent files.</p>
+              </div>
+            {/if}
+          </div>
+        </div>
+
+        <div>
+          <h2 class="text-sm font-medium text-on-surface mb-3">Invoices</h2>
+          <div class="space-y-3">
+            {#each invoices as invoice}
+              <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant flex flex-col">
+                <div class="flex justify-between items-start mb-2">
+                  {#if invoice.status === 'pending' || invoice.status === 'overdue'}
+                    <span class="text-[11px] font-medium text-tertiary bg-tertiary/[0.08] px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[12px]">schedule</span> Pending
+                    </span>
+                  {:else}
+                    <span class="text-[11px] font-medium text-success bg-success/[0.08] px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[12px]">check_circle</span> Paid
+                    </span>
+                  {/if}
+                  <span class="text-xs text-on-surface-variant">{invoice.invoice_number}</span>
+                </div>
+                <p class="text-[13px] text-on-surface-variant truncate mb-1">{invoice.notes || 'Invoice for Services'}</p>
+                <h3 class="text-[15px] font-semibold text-on-surface mb-1">{fmtAmt(invoice.total)}</h3>
+                {#if invoice.status === 'pending' && invoice.due_date}
+                  <p class="text-xs text-error mb-3">Due {fmtDate(invoice.due_date)}</p>
+                {:else}
+                  <p class="text-xs text-on-surface-variant mb-3">Issued {fmtDate(invoice.created_at)}</p>
+                {/if}
+                <div class="mt-auto">
+                  {#if invoice.status === 'paid'}
+                    <span class="w-full bg-success/[0.08] text-success py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5">
+                      <span class="material-symbols-outlined text-[16px]">check_circle</span> Paid
+                    </span>
+                  {:else if invoice.status === 'sent' || invoice.status === 'pending' || invoice.status === 'overdue'}
+                    <button class="w-full bg-primary hover:bg-primary-hover text-white py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50" onclick={() => payWithStripe(invoice.id)} disabled={payingInvoiceId === invoice.id}>
+                      {#if payingInvoiceId === invoice.id}
+                        <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>
+                      {:else}
+                        <span class="material-symbols-outlined text-[18px]">payments</span> Pay Now
+                      {/if}
+                    </button>
+                  {:else}
+                    <a href="/client/invoices" class="w-full bg-surface-container hover:bg-surface-container-high text-on-surface-variant py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 no-underline">
+                      <span class="material-symbols-outlined text-[18px]">visibility</span> View
+                    </a>
+                  {/if}
                 </div>
               </div>
-              <a href={file.file_url} target="_blank" rel="noopener noreferrer" class="w-8 h-8 rounded-full hover:bg-primary-container text-primary flex items-center justify-center transition-colors focus:outline-none shrink-0" title="Download">
-                <span class="material-symbols-outlined text-[20px]">download</span>
-              </a>
-            </div>
-          {/each}
-          {#if recentFiles.length === 0}
-            <div class="text-center p-6 bg-surface-container-lowest rounded-xl border border-outline-variant/20 text-on-surface-variant text-sm">
-              No recent files uploaded.
-            </div>
-          {/if}
-        </div>
-
-        <!-- Column 3: Invoices -->
-        <div class="space-y-4">
-          <h2 class="font-title-lg text-title-lg text-on-surface border-b border-outline-variant/30 pb-2 mb-4">Invoices</h2>
-          {#each invoices as invoice}
-            <div class="bg-surface rounded-xl p-5 shadow-sm border border-outline-variant/30 hover:border-primary/40 transition-colors flex flex-col">
-              <div class="flex justify-between items-start mb-3">
-                {#if invoice.status === 'pending' || invoice.status === 'overdue'}
-                  <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#fff7ed] text-[#ea580c] flex items-center gap-1">
-                    <span class="material-symbols-outlined text-[12px]">schedule</span> Pending
-                  </span>
-                {:else}
-                  <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#f0fdf4] text-[#16a34a] flex items-center gap-1">
-                    <span class="material-symbols-outlined text-[12px]">check_circle</span> Paid
-                  </span>
-                {/if}
-                <span class="font-label-sm text-xs font-semibold text-outline">{invoice.invoice_number}</span>
+            {/each}
+            {#if invoices.length === 0}
+              <div class="py-10 text-center border border-dashed border-outline-variant rounded-lg">
+                <span class="material-symbols-outlined text-[28px] text-outline mb-2 block">receipt_long</span>
+                <p class="text-sm text-on-surface-variant">No invoices yet.</p>
               </div>
-              
-              <div class="mb-4">
-                <p class="text-sm text-on-surface-variant truncate mb-1">{invoice.notes || 'Invoice for Services'}</p>
-                <h3 class="font-headline-sm text-headline-sm font-bold text-on-surface">{fmtAmt(invoice.total)}</h3>
-                {#if invoice.status === 'pending' && invoice.due_date}
-                  <p class="text-xs text-error mt-1">Due {fmtDate(invoice.due_date)}</p>
-                {:else}
-                  <p class="text-xs text-outline mt-1">Issued {fmtDate(invoice.created_at)}</p>
-                {/if}
-              </div>
-
-              <div class="mt-auto">
-                {#if invoice.status === 'pending' || invoice.status === 'overdue'}
-                  <button class="w-full bg-primary hover:bg-primary/90 text-white font-label-md py-2.5 rounded-lg shadow-sm transition-colors text-sm font-bold focus:outline-none">
-                    Pay Now
-                  </button>
-                {:else}
-                  <button class="w-full bg-surface-variant hover:bg-outline-variant text-on-surface-variant font-label-md py-2.5 rounded-lg transition-colors text-sm font-bold focus:outline-none flex items-center justify-center gap-2">
-                    <span class="material-symbols-outlined text-[18px]">download</span> Download PDF
-                  </button>
-                {/if}
-              </div>
-            </div>
-          {/each}
-          {#if invoices.length === 0}
-            <div class="text-center p-6 bg-surface-container-lowest rounded-xl border border-outline-variant/20 text-on-surface-variant text-sm">
-              No invoices available.
-            </div>
-          {/if}
+            {/if}
+          </div>
         </div>
       </div>
     {/if}
   </main>
 </div>
+
+{#if toastMsg}
+  <div class="fixed bottom-5 right-5 z-50 bg-on-surface text-surface px-4 py-2.5 rounded-lg shadow-md text-sm flex items-center gap-2 animate-fadeIn">
+    <span class="material-symbols-outlined text-[18px]">info</span>
+    {toastMsg}
+  </div>
+{/if}

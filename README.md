@@ -40,3 +40,16 @@ npm run build
 You can preview the production build with `npm run preview`.
 
 > To deploy your app, you may need to install an [adapter](https://svelte.dev/docs/kit/adapters) for your target environment.
+
+## AI summaries
+
+Summaries (messages, proofing feedback, project status) call any **OpenAI-compatible** chat-completions API, so you can use OpenAI, DeepSeek, Gemini's OpenAI-compatibility endpoint, or any gateway that speaks the same protocol. Set these in `.env`:
+
+```sh
+AI_BASE_URL=   # e.g. https://api.openai.com/v1 (the app calls {AI_BASE_URL}/chat/completions)
+AI_API_KEY=
+AI_MODEL=      # e.g. gpt-4o-mini, deepseek-chat
+```
+
+If any of the three is empty, the summarize endpoint returns `503 AI service not configured`. Each agency is limited to 10 summaries per hour (tracked in the `ai_usage` table; see `supabase/schema.sql`).
+

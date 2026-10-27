@@ -9,6 +9,7 @@
   let fullName = $state('');
   let showPassword = $state(false);
   let errorMsg = $state('');
+  let infoMsg = $state('');
   let loading = $state(false);
 
   async function handleSignup(e: Event) {
@@ -20,57 +21,44 @@
     if (!password || password.length < 6) { errorMsg = 'Password must be at least 6 characters.'; return; }
 
     errorMsg = '';
+    infoMsg = '';
     loading = true;
 
-    // 1. Create auth user
-    const { data: authData, error: authError } = await supabase.auth.signUp({
-      email,
-      password,
-    });
+    try {
+      const res = await fetch('/api/auth/signup', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ email, password, agencyName, fullName })
+      });
+      const json = await res.json().catch(() => ({}));
+      if (!res.ok) {
+        errorMsg = json.message || 'Could not create your account.';
+        loading = false;
+        return;
+      }
 
-    if (authError || !authData.user) {
-      errorMsg = authError?.message || 'Failed to create user in Auth.';
+      if (!json.session) {
+        infoMsg = 'Account created. Check your email to confirm your address, then sign in.';
+        loading = false;
+        return;
+      }
+
+      const { error: sessionErr } = await supabase.auth.setSession(json.session);
+      if (sessionErr) {
+        errorMsg = sessionErr.message;
+        loading = false;
+        return;
+      }
+
+      authState.agencyId = json.agencyId;
+      authState.agencyName = agencyName;
+      authState.userFullName = fullName;
       loading = false;
-      return;
-    }
-
-    const userId = authData.user.id;
-
-    // 2. Insert into agencies table
-    const { data: agencyData, error: agencyError } = await supabase.from('agencies').insert({
-      name: agencyName,
-      email: email,
-      primary_color: '#630ED4'
-    }).select('id').single();
-
-    if (agencyError || !agencyData) {
-      errorMsg = agencyError?.message || 'Failed to create agency record.';
+      goto('/');
+    } catch {
+      errorMsg = 'Network error. Please try again.';
       loading = false;
-      return;
     }
-
-    // 3. Insert into users table with full_name
-    const { error: userError } = await supabase.from('users').insert({
-      id: userId,
-      agency_id: agencyData.id,
-      full_name: fullName,
-      email: email,
-      role: 'admin'
-    });
-
-    if (userError) {
-      errorMsg = userError.message;
-      loading = false;
-      return;
-    }
-
-    // Manually update authState so the dashboard has data immediately
-    authState.agencyId = agencyData.id;
-    authState.agencyName = agencyName;
-    authState.userFullName = fullName;
-
-    loading = false;
-    goto('/');
   }
 </script>
 
@@ -98,6 +86,12 @@
 
       <!-- Form Area -->
       <div class="p-8">
+        {#if infoMsg}
+          <div class="mb-6 p-4 bg-success-container text-success border border-success/20 rounded-lg flex items-center gap-2 font-body-md text-body-md" role="status">
+            <span class="material-symbols-outlined text-xl">mark_email_read</span>
+            <span>{infoMsg}</span>
+          </div>
+        {/if}
         {#if errorMsg}
           <div class="mb-6 p-4 bg-error-container text-on-error-container border border-error/20 rounded-lg flex items-center gap-2 font-body-md text-body-md">
             <span class="material-symbols-outlined text-xl">error</span>

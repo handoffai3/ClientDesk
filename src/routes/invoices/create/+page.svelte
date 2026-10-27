@@ -68,7 +68,7 @@
     }
   });
 
-  async function handleSave(status: 'pending' | 'paid') {
+  async function handleSave(status: 'draft' | 'sent') {
     if (!clientId) { errorMsg = 'Please select a client.'; return; }
     if (lineItems.every(i => !i.description && !i.qty && !i.rate)) { errorMsg = 'Add at least one line item.'; return; }
     saving = true;
@@ -136,34 +136,31 @@
 </svelte:head>
 
 <style>
-  .hero-gradient { background: linear-gradient(135deg, #630ed4 0%, #d2bbff 100%); }
   .form-input {
-    border: 1px solid #E5E7EB; border-radius: 8px; transition: all 0.2s ease;
-    color: #1d1a24;
+    border: 1px solid #E5E7EB; border-radius: 8px; transition: border-color 0.15s, box-shadow 0.15s;
+    color: #1d1a24; font-size: 14px;
   }
-  .form-input:focus { border-color: #630ed4; box-shadow: 0 0 0 2px rgba(99, 14, 212, 0.2); outline: none; }
+  .form-input:focus { border-color: #5b21b6; box-shadow: 0 0 0 2px rgba(91, 33, 182, 0.1); outline: none; }
 </style>
 
 <div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex overflow-hidden w-full">
   <AgencyHeader activeTab="Invoices" />
 
   <!-- Main -->
-  <main class="flex-1 overflow-y-auto mt-16 px-margin-desktop py-8 max-w-container-max mx-auto w-full space-y-stack-md">
-    <!-- Back -->
-    <a href="/invoices" class="flex items-center gap-1 w-fit text-on-surface-variant hover:text-primary transition-colors">
-      <span class="material-symbols-outlined text-[20px]">arrow_back</span>
-      <span class="font-body-md font-medium">Back to Invoices</span>
+  <main class="flex-1 overflow-y-auto mt-14 px-6 py-6 max-w-container-max mx-auto w-full space-y-5">
+    <a href="/invoices" class="flex items-center gap-1.5 w-fit text-on-surface-variant hover:text-on-surface transition-colors no-underline">
+      <span class="material-symbols-outlined text-[16px]">arrow_back</span>
+      <span class="text-[13px] font-medium">Invoices</span>
     </a>
 
-    <!-- Hero -->
-    <div class="hero-gradient rounded-xl p-8 text-on-primary flex flex-col md:flex-row justify-between items-start md:items-center shadow-lg">
+    <div class="flex flex-col md:flex-row md:items-center justify-between gap-3 animate-fadeIn">
       <div>
-        <h1 class="font-headline-lg text-headline-lg md:font-display-lg md:text-display-lg mb-2">Create Invoice</h1>
-        <p class="font-body-lg text-body-lg opacity-90">Generate and send professional invoices</p>
+        <h1 class="text-xl font-semibold text-on-surface mb-1">Create Invoice</h1>
+        <p class="text-sm text-on-surface-variant">Generate and send professional invoices</p>
       </div>
-      <div class="mt-4 md:mt-0 bg-white/20 backdrop-blur-sm px-4 py-2 rounded-lg border border-white/30">
-        <span class="font-label-md text-label-md uppercase tracking-wider opacity-80 block">Invoice #</span>
-        <span class="font-title-md text-title-md">{invoiceNumber}</span>
+      <div class="bg-white border border-outline-variant rounded-lg px-3 py-2 shadow-xs">
+        <span class="text-[11px] text-on-surface-variant block">Invoice #</span>
+        <span class="text-sm font-medium text-on-surface">{invoiceNumber}</span>
       </div>
     </div>
 
@@ -174,12 +171,11 @@
     {/if}
 
     <!-- Form + Preview -->
-    <div class="grid grid-cols-1 lg:grid-cols-12 gap-gutter items-start">
-      <!-- Left: Form -->
-      <div class="lg:col-span-7 bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col gap-6">
+    <div class="grid grid-cols-1 lg:grid-cols-12 gap-5 items-start">
+      <div class="lg:col-span-7 bg-white rounded-lg border border-outline-variant p-5 shadow-xs flex flex-col gap-5">
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="flex flex-col gap-1">
-            <label class="font-label-md text-label-md text-on-surface-variant" for="inv-client">Client *</label>
+            <label class="text-xs font-medium text-on-surface-variant" for="inv-client">Client *</label>
             <select id="inv-client" class="form-input w-full p-2 font-body-md text-body-md bg-transparent" bind:value={clientId} disabled={saving}>
               <option value="" disabled>Select Client...</option>
               {#each clients as c (c.id)}
@@ -188,7 +184,7 @@
             </select>
           </div>
           <div class="flex flex-col gap-1">
-            <label class="font-label-md text-label-md text-on-surface-variant" for="inv-project">Project</label>
+            <label class="text-xs font-medium text-on-surface-variant" for="inv-project">Project</label>
             <select id="inv-project" class="form-input w-full p-2 font-body-md text-body-md bg-transparent" bind:value={projectId} disabled={saving}>
               <option value="">None</option>
               {#each filteredProjects as p (p.id)}
@@ -200,25 +196,25 @@
 
         <div class="grid grid-cols-1 md:grid-cols-2 gap-4">
           <div class="flex flex-col gap-1">
-            <label class="font-label-md text-label-md text-on-surface-variant" for="inv-issue">Issue Date</label>
+            <label class="text-xs font-medium text-on-surface-variant" for="inv-issue">Issue Date</label>
             <input id="inv-issue" class="form-input w-full p-2 font-body-md text-body-md bg-transparent" type="date" bind:value={issueDate} disabled={saving} />
           </div>
           <div class="flex flex-col gap-1">
-            <label class="font-label-md text-label-md text-on-surface-variant" for="inv-due">Due Date</label>
+            <label class="text-xs font-medium text-on-surface-variant" for="inv-due">Due Date</label>
             <input id="inv-due" class="form-input w-full p-2 font-body-md text-body-md bg-transparent" type="date" bind:value={dueDate} disabled={saving} />
           </div>
         </div>
 
         <!-- Line Items -->
-        <div class="border-t border-outline-variant pt-6">
-          <h3 class="font-title-md text-title-md text-on-surface mb-4 flex items-center justify-between">
-            Line Items
-            <button class="font-label-md text-label-md text-primary flex items-center gap-1 hover:opacity-80 transition-opacity focus:outline-none" onclick={addItem}>
+        <div class="border-t border-outline-variant pt-5">
+          <div class="flex items-center justify-between mb-3">
+            <h3 class="text-sm font-medium text-on-surface">Line Items</h3>
+            <button class="text-[13px] text-primary font-medium flex items-center gap-1 hover:opacity-80 transition-opacity focus:outline-none" onclick={addItem}>
               <span class="material-symbols-outlined text-[16px]">add</span> Add Item
             </button>
-          </h3>
+          </div>
 
-          <div class="grid grid-cols-12 gap-2 mb-2 font-label-md text-label-md text-on-surface-variant px-2">
+          <div class="grid grid-cols-12 gap-2 mb-2 text-[11px] font-medium text-on-surface-variant px-2">
             <div class="col-span-5">Description</div>
             <div class="col-span-2 text-right">Qty</div>
             <div class="col-span-2 text-right">Rate</div>
@@ -248,77 +244,77 @@
         </div>
 
         <!-- Totals -->
-        <div class="border-t border-outline-variant pt-6 flex flex-col md:flex-row justify-between items-end gap-6">
-          <div class="w-full md:w-auto flex items-center gap-3 bg-surface p-3 rounded-lg border border-outline-variant">
-            <span class="font-label-md text-label-md text-on-surface">Apply GST (18%)</span>
+        <div class="border-t border-outline-variant pt-5 flex flex-col md:flex-row justify-between items-end gap-5">
+          <div class="w-full md:w-auto flex items-center gap-3 bg-surface-container-low p-3 rounded-lg border border-outline-variant">
+            <span class="text-sm text-on-surface">Apply GST (18%)</span>
             <input type="checkbox" bind:checked={applyGst} class="accent-primary w-5 h-5" />
           </div>
-          <div class="w-full md:w-64 flex flex-col gap-2">
-            <div class="flex justify-between font-body-md text-body-md text-on-surface-variant">
+          <div class="w-full md:w-56 flex flex-col gap-1.5">
+            <div class="flex justify-between text-sm text-on-surface-variant">
               <span>Subtotal</span><span>₹{fmt(subtotal)}</span>
             </div>
             {#if applyGst}
-              <div class="flex justify-between font-body-md text-body-md text-on-surface-variant">
+              <div class="flex justify-between text-sm text-on-surface-variant">
                 <span>GST (18%)</span><span>₹{fmt(gstAmount)}</span>
               </div>
             {/if}
-            <div class="flex justify-between font-title-md text-title-md text-on-surface pt-2 border-t border-outline-variant font-bold">
+            <div class="flex justify-between text-[15px] text-on-surface pt-2 border-t border-outline-variant font-semibold">
               <span>Total</span><span>₹{fmt(total)}</span>
             </div>
           </div>
         </div>
 
         <!-- Notes -->
-        <div class="border-t border-outline-variant pt-6">
-          <label class="font-label-md text-label-md text-on-surface-variant mb-1 block" for="inv-notes">Notes</label>
+        <div class="border-t border-outline-variant pt-5">
+          <label class="text-xs font-medium text-on-surface-variant mb-1 block" for="inv-notes">Notes</label>
           <textarea id="inv-notes" class="form-input w-full p-3 font-body-md text-body-md bg-transparent resize-none" rows="2" bind:value={notes} placeholder="Payment terms, thank you note..." disabled={saving}></textarea>
         </div>
 
         <!-- Actions -->
-        <div class="pt-4 flex justify-end gap-3 border-t border-outline-variant">
-          <a href="/invoices" class="px-6 py-2 rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant hover:bg-outline-variant transition-colors no-underline">Cancel</a>
-          <button onclick={() => handleSave('pending')} disabled={saving} class="px-6 py-2 rounded-lg font-label-md text-label-md bg-surface-variant text-on-surface-variant hover:bg-outline-variant transition-colors focus:outline-none flex items-center gap-2">
-            {#if saving}<svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>{/if}
+        <div class="pt-4 flex justify-end gap-2 border-t border-outline-variant">
+          <a href="/invoices" class="px-4 py-2 rounded-lg text-sm font-medium text-on-surface-variant hover:bg-surface-container transition-colors no-underline">Cancel</a>
+          <button onclick={() => handleSave('draft')} disabled={saving} class="px-4 py-2 rounded-lg text-sm font-medium border border-outline-variant text-on-surface-variant hover:bg-surface-container-low transition-colors focus:outline-none flex items-center gap-1.5">
+            {#if saving}<div class="w-3.5 h-3.5 border-2 border-outline/30 border-t-outline rounded-full animate-spin"></div>{/if}
             Save Draft
           </button>
-          <button onclick={() => handleSave('pending')} disabled={saving} class="px-6 py-2 rounded-lg font-label-md text-label-md text-on-primary bg-primary hover:opacity-90 transition-opacity flex items-center gap-2 shadow-md focus:outline-none">
+          <button onclick={() => handleSave('sent')} disabled={saving} class="px-4 py-2 rounded-lg text-sm font-medium text-white bg-primary hover:bg-primary-hover transition-colors flex items-center gap-1.5 focus:outline-none">
             <span class="material-symbols-outlined text-[16px]">send</span> Send to Client
           </button>
         </div>
       </div>
 
       <!-- Right: Live Preview -->
-      <div class="lg:col-span-5 bg-surface-container-lowest rounded-xl p-6 shadow-sm flex flex-col sticky top-24">
-        <div class="flex items-center justify-between mb-6 pb-4 border-b border-outline-variant">
-          <h2 class="font-title-md text-title-md text-on-surface">Live Preview</h2>
-          <span class="material-symbols-outlined text-outline">visibility</span>
+      <div class="lg:col-span-5 bg-white rounded-lg border border-outline-variant p-5 shadow-xs flex flex-col sticky top-20">
+        <div class="flex items-center justify-between mb-4 pb-3 border-b border-outline-variant">
+          <h2 class="text-sm font-medium text-on-surface">Live Preview</h2>
+          <span class="material-symbols-outlined text-outline text-[18px]">visibility</span>
         </div>
 
-        <div class="bg-white border border-outline-variant p-6 rounded-lg shadow-sm flex-1 font-body-md text-body-md text-on-surface relative overflow-hidden">
-          <div class="absolute -right-6 top-12 rotate-[30deg] opacity-10 pointer-events-none">
-            <span class="font-display-lg text-display-lg text-primary uppercase font-bold border-4 border-primary p-2 rounded">DRAFT</span>
+        <div class="bg-surface-container-low border border-outline-variant p-5 rounded-lg flex-1 text-sm text-on-surface relative overflow-hidden">
+          <div class="absolute -right-4 top-10 rotate-[30deg] opacity-[0.06] pointer-events-none">
+            <span class="text-[32px] text-primary uppercase font-bold border-2 border-primary px-2 py-1 rounded">DRAFT</span>
           </div>
 
-          <div class="flex justify-between items-start mb-8">
-            <div class="flex items-center gap-3">
-              <div class="w-12 h-12 bg-primary rounded-xl flex items-center justify-center text-white font-bold text-xl">
+          <div class="flex justify-between items-start mb-6">
+            <div class="flex items-center gap-2.5">
+              <div class="w-9 h-9 bg-primary rounded-lg flex items-center justify-center text-white font-medium text-sm">
                 {(authState.agencyName || 'ClientDesk').substring(0, 1)}
               </div>
               <div>
-                <div class="font-headline-md text-headline-md font-bold text-primary mb-1">{authState.agencyName || 'ClientDesk'}</div>
-                <div class="text-on-surface-variant text-[12px] leading-relaxed">123 Tech Park, Block B<br/>GSTIN: 29XXXXX0000X1Z5</div>
+                <div class="text-sm font-semibold text-primary">{authState.agencyName || 'ClientDesk'}</div>
+                <div class="text-xs text-on-surface-variant">{authState.user?.email || ''}</div>
               </div>
             </div>
             <div class="text-right">
-              <div class="font-title-md text-title-md mb-1 text-on-surface-variant">INVOICE</div>
-              <div class="font-label-md text-label-md">#{invoiceNumber}</div>
-              <div class="text-[12px] mt-2 text-on-surface-variant">{issueDate ? new Date(issueDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not set'}</div>
+              <div class="text-xs text-on-surface-variant mb-0.5">INVOICE</div>
+              <div class="text-xs font-medium">#{invoiceNumber}</div>
+              <div class="text-[11px] mt-1 text-on-surface-variant">{issueDate ? new Date(issueDate).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'Not set'}</div>
             </div>
           </div>
 
-          <div class="mb-8 p-4 bg-surface-container-low rounded">
-            <div class="font-label-md text-label-md text-on-surface-variant mb-1 uppercase">Billed To:</div>
-            <div class="font-title-md text-title-md">{clients.find(c => c.id === clientId)?.full_name || 'Select a Client'}</div>
+          <div class="mb-6 p-3 bg-white rounded-lg border border-outline-variant">
+            <div class="text-[10px] text-on-surface-variant mb-1 uppercase font-medium">Billed To:</div>
+            <div class="text-sm font-medium">{clients.find(c => c.id === clientId)?.full_name || 'Select a Client'}</div>
             {#if clients.find(c => c.id === clientId)?.company}
               <div class="text-[12px] text-on-surface-variant mt-1">{clients.find(c => c.id === clientId)?.company}</div>
             {/if}
@@ -327,9 +323,9 @@
             {/if}
           </div>
 
-          <table class="w-full mb-8 text-[13px]">
+          <table class="w-full mb-6 text-[13px]">
             <thead>
-              <tr class="border-b-2 border-surface-variant text-left text-on-surface-variant font-label-md text-label-md">
+              <tr class="border-b border-outline-variant text-left text-[11px] font-medium text-on-surface-variant">
                 <th class="pb-2">Description</th>
                 <th class="pb-2 text-right w-12">Qty</th>
                 <th class="pb-2 text-right w-20">Rate</th>
@@ -361,7 +357,7 @@
               {#if applyGst}
                 <div class="flex justify-between py-1 text-on-surface-variant"><span>GST (18%)</span><span>₹{fmt(gstAmount)}</span></div>
               {/if}
-              <div class="flex justify-between py-2 mt-2 border-t border-surface-variant font-title-md text-title-md text-primary font-bold">
+              <div class="flex justify-between py-2 mt-1.5 border-t border-outline-variant text-sm text-primary font-semibold">
                 <span>Total INR</span><span>₹{fmt(total)}</span>
               </div>
             </div>
