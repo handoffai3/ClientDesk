@@ -571,6 +571,25 @@ CREATE POLICY "client_update_deliverables" ON deliverables FOR UPDATE
   USING (client_id IN (SELECT client_id FROM client_users WHERE id = auth.uid()))
   WITH CHECK (client_id IN (SELECT client_id FROM client_users WHERE id = auth.uid()));
 
+-- Only client users may change approval status (approved/changes_requested)
+CREATE OR REPLACE FUNCTION public.enforce_deliverable_approval_role()
+RETURNS trigger LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
+BEGIN
+  IF (NEW.status IS DISTINCT FROM OLD.status)
+     AND NEW.status IN ('approved', 'changes_requested')
+     AND NOT EXISTS (SELECT 1 FROM client_users WHERE id = auth.uid() AND client_id = OLD.client_id)
+  THEN
+    RAISE EXCEPTION 'Only client users may approve or request changes on deliverables';
+  END IF;
+  RETURN NEW;
+END;
+$$;
+
+DROP TRIGGER IF EXISTS trg_deliverable_approval_role ON deliverables;
+CREATE TRIGGER trg_deliverable_approval_role
+  BEFORE UPDATE ON deliverables
+  FOR EACH ROW EXECUTE FUNCTION enforce_deliverable_approval_role();
+
 DROP POLICY IF EXISTS "agency_pins" ON pins;
 CREATE POLICY "agency_pins" ON pins FOR ALL
   USING (deliverable_id IN (SELECT id FROM deliverables WHERE agency_id = (SELECT agency_id FROM users WHERE id = auth.uid())));

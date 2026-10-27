@@ -1,5 +1,5 @@
 <script lang="ts">
-  import NotificationBell from '$lib/components/NotificationBell.svelte';
+  import ClientHeader from '$lib/components/ClientHeader.svelte';
   import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { clientStore } from '$lib/clientStore';
@@ -7,11 +7,8 @@
   import { goto } from '$app/navigation';
   import { onMount, onDestroy } from 'svelte';
 
-  const navTabs = ['Dashboard', 'My Projects', 'Files', 'Invoices', 'Messages'];
-
   import { clientDataStore } from '../../../stores/clientData';
 
-  let userMenuOpen = $state(false);
   let selectedChannel = $state<string | null>(null);
   let messageInput = $state('');
   let sending = $state(false);
@@ -107,15 +104,6 @@
     if (realtimeChannel) supabase.removeChannel(realtimeChannel);
   });
 
-  function tabHref(tab: string) {
-    if (tab === 'Dashboard') return '/client/dashboard';
-    if (tab === 'My Projects') return '/client/projects';
-    if (tab === 'Files') return '/client/files';
-    if (tab === 'Invoices') return '/client/invoices';
-    if (tab === 'Messages') return '/client/messages';
-    return '/client/dashboard';
-  }
-
   function formatTime(dateStr: string) {
     return new Date(dateStr).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit', hour12: true });
   }
@@ -173,11 +161,6 @@
     }
   }
 
-  async function handleSignOut() {
-    userMenuOpen = false;
-    await supabase.auth.signOut();
-    goto('/client/login');
-  }
 </script>
 
 <svelte:head>
@@ -185,48 +168,9 @@
 </svelte:head>
 
 <div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex overflow-hidden w-full">
-  <!-- Top Nav -->
-  <div class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-surface/90 backdrop-blur-xl shadow-sm border-b border-outline-variant/10">
-    <div class="flex items-center gap-8 w-full max-w-container-max mx-auto justify-between">
-      <div class="flex items-center gap-8">
-        <a href="/client/dashboard" class="flex items-center">
-          {#if agencyLogo}
-            <img src={agencyLogo} alt="{agencyName} Logo" class="h-8 max-w-[150px] object-contain" />
-          {:else}
-            <span class="font-headline-md text-headline-md font-bold text-primary">{agencyName}</span>
-          {/if}
-        </a>
-        <nav class="hidden md:flex gap-8">
-          {#each navTabs as tab}
-            <a href={tabHref(tab)} class="relative font-label-md text-label-md transition-colors duration-150 py-5 focus:outline-none {tab === 'Messages' ? 'text-primary border-b-2 border-primary font-bold' : 'text-on-surface-variant hover:text-on-surface'}">{tab}</a>
-          {/each}
-        </nav>
-      </div>
-      <div class="flex items-center gap-4">
-        <NotificationBell />
-        <div class="relative">
-          <button class="flex items-center active:scale-95 transition-transform duration-150 focus:outline-none bg-primary-container text-on-primary-container w-8 h-8 rounded-full border border-outline-variant justify-center font-bold text-xs" onclick={() => userMenuOpen = !userMenuOpen}>
-            {initials($clientStore.full_name)}
-          </button>
-          {#if userMenuOpen}
-            <div class="absolute right-0 top-10 w-48 bg-surface-container-lowest border border-outline-variant/50 rounded-xl shadow-lg py-2 z-50">
-              <div class="px-4 py-2 border-b border-outline-variant/30">
-                <p class="text-xs font-semibold text-on-surface">{$clientStore.full_name || 'Client'}</p>
-                <p class="text-[10px] text-outline truncate">{authState.user?.email || ''}</p>
-              </div>
-              <hr class="border-outline-variant/30 my-1" />
-              <button class="w-full text-left px-4 py-2 text-xs text-error hover:bg-error-container/20 transition-colors flex items-center gap-2" onclick={handleSignOut}>
-                <span class="material-symbols-outlined text-sm">logout</span> Sign Out
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-    </div>
-  </div>
+  <ClientHeader activeTab="Messages" />
 
-  <!-- Main Split View -->
-  <main class="flex-1 mt-16 max-w-container-max mx-auto w-full h-[calc(100vh-64px)] flex border-x border-outline-variant/10 shadow-sm bg-surface">
+  <main class="flex-1 mt-14 max-w-container-max mx-auto w-full h-[calc(100vh-56px)] flex border-x border-outline-variant/10 shadow-sm bg-surface">
     {#if loading}
       <div class="w-full h-full flex items-center justify-center">
         <div class="animate-spin rounded-full h-10 w-10 border-b-2 border-primary"></div>

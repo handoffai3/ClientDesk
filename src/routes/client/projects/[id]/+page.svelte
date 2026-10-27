@@ -1,5 +1,5 @@
 <script lang="ts">
-  import NotificationBell from '$lib/components/NotificationBell.svelte';
+  import ClientHeader from '$lib/components/ClientHeader.svelte';
   import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { clientStore } from '$lib/clientStore';
@@ -9,7 +9,6 @@
   import { onMount } from 'svelte';
   import ProofingCanvas from '$lib/components/ProofingCanvas.svelte';
 
-  const navTabs = ['Dashboard', 'My Projects', 'Files', 'Invoices', 'Messages'];
   const projectId = $derived($page.params.id);
 
   let project = $state<any>(null);
@@ -25,8 +24,6 @@
   let uploadingFile = $state(false);
   let payingFileId = $state<string | null>(null);
   let fileInputEl = $state<HTMLInputElement | null>(null);
-  let userMenuOpen = $state(false);
-  let agencyLogo = $state('');
   let agencyName = $state('ClientDesk');
   let msgInput = $state('');
   let sendingMsg = $state(false);
@@ -84,7 +81,7 @@
   async function loadProject(clientId: string, agencyId: string) {
     loading = true;
     const { data: ag } = await supabase.from('agencies').select('logo_url, name').eq('id', agencyId).single();
-    if (ag) { agencyLogo = ag.logo_url || ''; agencyName = ag.name || 'ClientDesk'; }
+    if (ag) { agencyName = ag.name || 'ClientDesk'; }
 
     const { data } = await supabase.from('projects').select('*').eq('id', projectId).eq('client_id', clientId).single();
     if (!data) { loading = false; return; }
@@ -228,8 +225,6 @@
   function fmtTime(d: string) { return new Date(d).toLocaleTimeString('en-IN', { hour: '2-digit', minute: '2-digit' }); }
   function initials(n: string | null) { return n?.substring(0, 2).toUpperCase() || 'NA'; }
   function isTomorrow(ds: string) { const d = new Date(ds); const t = new Date(); t.setDate(t.getDate() + 1); return d.toDateString() === t.toDateString(); }
-  function tabHref(tab: string) { if (tab === 'Dashboard') return '/client/dashboard'; if (tab === 'My Projects') return '/client/projects'; if (tab === 'Files') return '/client/files'; if (tab === 'Invoices') return '/client/invoices'; if (tab === 'Messages') return '/client/messages'; return '/client/dashboard'; }
-
   function fileIcon(name: string) {
     const ext = name?.split('.').pop()?.toLowerCase() || '';
     if (ext === 'pdf') return { icon: 'picture_as_pdf', bg: 'bg-red-50', text: 'text-red-500' };
@@ -268,7 +263,6 @@
     return 'Pending';
   }
 
-  async function handleSignOut() { userMenuOpen = false; await supabase.auth.signOut(); goto('/client/login'); }
 </script>
 
 <svelte:head><title>{project?.name || 'Project'} - Client Portal</title></svelte:head>
@@ -281,37 +275,9 @@
 </style>
 
 <div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex overflow-hidden w-full">
-  <!-- Top Nav -->
-  <div class="fixed top-0 w-full z-50 flex justify-between items-center px-margin-desktop h-16 bg-surface/90 backdrop-blur-xl shadow-sm border-b border-outline-variant/10">
-    <div class="flex items-center gap-8 w-full max-w-container-max mx-auto justify-between">
-      <div class="flex items-center gap-8">
-        <a href="/client/dashboard" class="flex items-center">
-          {#if agencyLogo}<img src={agencyLogo} alt="{agencyName}" class="h-8 max-w-[150px] object-contain" />
-          {:else}<span class="font-headline-md text-headline-md font-bold text-primary">{agencyName}</span>{/if}
-        </a>
-        <nav class="hidden md:flex gap-8">
-          {#each navTabs as tab}
-            <a href={tabHref(tab)} class="relative font-label-md text-label-md transition-colors duration-150 py-5 focus:outline-none {tab === 'My Projects' ? 'text-primary border-b-2 border-primary font-bold' : 'text-on-surface-variant hover:text-on-surface'}">{tab}</a>
-          {/each}
-        </nav>
-      </div>
-      <div class="flex items-center gap-4">
-        <NotificationBell />
-        <div class="relative">
-          <button class="bg-primary-container text-on-primary-container w-8 h-8 rounded-full border border-outline-variant flex items-center justify-center font-bold text-xs focus:outline-none" onclick={() => userMenuOpen = !userMenuOpen}>{initials($clientStore.full_name)}</button>
-          {#if userMenuOpen}
-            <div class="absolute right-0 top-10 w-48 bg-surface-container-lowest border border-outline-variant/50 rounded-xl shadow-lg py-2 z-50">
-              <div class="px-4 py-2 border-b border-outline-variant/30"><p class="text-xs font-semibold">{$clientStore.full_name || 'Client'}</p><p class="text-[10px] text-outline truncate">{authState.user?.email}</p></div>
-              <hr class="border-outline-variant/30 my-1" />
-              <button class="w-full text-left px-4 py-2 text-xs text-error hover:bg-error-container/20 flex items-center gap-2" onclick={handleSignOut}><span class="material-symbols-outlined text-sm">logout</span> Sign Out</button>
-            </div>
-          {/if}
-        </div>
-      </div>
-    </div>
-  </div>
+  <ClientHeader activeTab="My Projects" />
 
-  <main class="flex-1 overflow-y-auto mt-16 px-margin-desktop py-8 max-w-container-max mx-auto w-full space-y-6">
+  <main class="flex-1 overflow-y-auto mt-14 px-6 py-6 max-w-container-max mx-auto w-full space-y-6">
     {#if loading}
       <div class="py-20 flex justify-center"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>
     {:else if !project}

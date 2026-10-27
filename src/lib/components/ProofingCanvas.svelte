@@ -56,6 +56,11 @@
   let replyContent = $state<Record<string, string>>({});
   let submittingReply = $state<string | null>(null);
 
+  // Mobile state
+  let pinModeActive = $state(false);
+  let mobileSheetOpen = $state(false);
+  let pinError = $state('');
+
   // Toast
   let toastMsg = $state('');
   let toastType = $state<'success' | 'error'>('success');
@@ -239,47 +244,67 @@
 
   function handleCanvasClick(e: MouseEvent) {
     if (isApproved) return;
+    const isMobile = window.innerWidth < 768;
+    if (isMobile && !pinModeActive) return;
     const target = (isPdf ? pdfCanvas : imageEl) as HTMLElement;
     if (!target) return;
+    if (e.target !== target && !(e.target as HTMLElement)?.closest?.('.canvas-area')) return;
     const rect = target.getBoundingClientRect();
-    const x = ((e.clientX - rect.left) / rect.width) * 100;
-    const y = ((e.clientY - rect.top) / rect.height) * 100;
-    if (x < 0 || x > 100 || y < 0 || y > 100) return;
+    const x = Math.min(100, Math.max(0, ((e.clientX - rect.left) / rect.width) * 100));
+    const y = Math.min(100, Math.max(0, ((e.clientY - rect.top) / rect.height) * 100));
     newPinPos = { x, y };
     newPinContent = '';
+    pinError = '';
+    if (isMobile) {
+      mobileSheetOpen = true;
+    }
     setTimeout(() => newPinInput?.focus(), 50);
   }
 
   async function submitPin() {
     if (!newPinPos || !newPinContent.trim()) return;
     submittingPin = true;
-    const { data, error } = await supabase.from('pins').insert({
-      deliverable_id: deliverable.id,
-      author_id: userId,
-      author_type: userRole,
-      author_name: userName,
-      x_percent: newPinPos.x,
-      y_percent: newPinPos.y,
-      page_number: isPdf ? currentPage : 1,
-      content: newPinContent,
-    }).select('*').single();
+    pinError = '';
+    try {
+      const { data, error } = await supabase.from('pins').insert({
+        deliverable_id: deliverable.id,
+        author_id: userId,
+        author_type: userRole,
+        author_name: userName,
+        x_percent: newPinPos.x,
+        y_percent: newPinPos.y,
+        page_number: isPdf ? currentPage : 1,
+        content: newPinContent,
+      }).select('*').single();
 
-    if (data && !pins.find(p => p.id === data.id)) {
-      pins = [...pins, data];
-      notifyOtherParty(
-        `New feedback on ${deliverable.title}`,
-        `${userName}: "${newPinContent.substring(0, 80)}"`
-      );
+      if (error) {
+        pinError = error.message || 'Failed to add pin';
+        showToast('Failed to add pin', 'error');
+        submittingPin = false;
+        return;
+      }
+      if (data && !pins.find(p => p.id === data.id)) {
+        pins = [...pins, data];
+        notifyOtherParty(
+          `New feedback on ${deliverable.title}`,
+          `${userName}: "${newPinContent.substring(0, 80)}"`
+        );
+      }
+      newPinPos = null;
+      newPinContent = '';
+      mobileSheetOpen = false;
+      if (pinModeActive) pinModeActive = false;
+    } catch (err: any) {
+      pinError = err.message || 'Unexpected error';
+      showToast('Failed to add pin', 'error');
     }
-    if (error) showToast('Failed to add pin', 'error');
-    newPinPos = null;
-    newPinContent = '';
     submittingPin = false;
   }
 
   function cancelNewPin() {
     newPinPos = null;
     newPinContent = '';
+    pinError = '';
   }
 
   async function toggleResolved(pin: any) {
@@ -475,74 +500,101 @@
   }
   .canvas-area { cursor: crosshair; }
   .canvas-area.approved { cursor: default; }
+  @media (max-width: 767px) {
+    .canvas-area { cursor: default; touch-action: pan-x pan-y pinch-zoom; }
+    .canvas-area.pin-mode { cursor: crosshair; touch-action: none; }
+  }
   .thread-resolved { opacity: 0.6; }
+  @keyframes slideUp {
+    from { transform: translateY(100%); }
+    to { transform: translateY(0); }
+  }
+  .animate-slideUp { animation: slideUp 0.25s ease-out forwards; }
   .thread-resolved .thread-content { text-decoration: line-through; }
 </style>
 
 <div class="proofing-overlay">
   <!-- Top Toolbar -->
-  <div class="bg-white border-b border-outline-variant px-5 py-2.5 flex items-center justify-between gap-4 shrink-0">
-    <div class="flex items-center gap-4 min-w-0">
+  <div class="bg-white border-b border-outline-variant px-3 md:px-5 py-2 md:py-2.5 flex items-center justify-between gap-2 md:gap-4 shrink-0">
+    <div class="flex items-center gap-2 md:gap-4 min-w-0">
       <button onclick={onClose} class="text-on-surface-variant hover:text-primary p-1.5 rounded-lg hover:bg-surface-container transition-colors focus:outline-none shrink-0">
-        <span class="material-symbols-outlined">close</span>
+        <span class="material-symbols-outlined text-[20px] md:text-[24px]">close</span>
       </button>
       <div class="min-w-0">
-        <h2 class="text-sm font-semibold text-on-surface truncate">{deliverable.title}</h2>
+        <h2 class="text-xs md:text-sm font-semibold text-on-surface truncate">{deliverable.title}</h2>
         <div class="flex items-center gap-2 mt-0.5">
           <span class="{statusBadge(deliverable.status)} px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">{statusLabel(deliverable.status)}</span>
-          <span class="text-[11px] text-outline">v{deliverable.version}</span>
+          <span class="text-[11px] text-outline hidden md:inline">v{deliverable.version}</span>
           <span class="text-[11px] text-outline">{pins.length} pin{pins.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
     </div>
 
-    <div class="flex items-center gap-2 shrink-0">
-      <!-- Pin filter -->
-      <div class="flex bg-surface-container rounded-lg p-0.5 gap-0.5">
+    <div class="flex items-center gap-1 md:gap-2 shrink-0 overflow-x-auto no-scrollbar">
+      <!-- Pin filter (hidden on mobile, shown in sheet) -->
+      <div class="hidden md:flex bg-surface-container rounded-lg p-0.5 gap-0.5">
         {#each [['all', 'All'], ['unresolved', 'Open'], ['resolved', 'Done']] as [val, label]}
           <button onclick={() => pinFilter = val as any} class="px-3 py-1 rounded-md text-[11px] font-semibold transition-colors focus:outline-none {pinFilter === val ? 'bg-primary text-white' : 'text-on-surface-variant hover:bg-surface-variant'}">{label}</button>
         {/each}
       </div>
 
       <!-- Zoom -->
-      <div class="flex items-center gap-1 bg-surface-container rounded-lg p-0.5">
-        <button onclick={zoomOut} class="p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none"><span class="material-symbols-outlined text-[18px]">remove</span></button>
-        <button onclick={zoomFit} class="px-2 py-1 text-[11px] font-semibold text-on-surface-variant hover:bg-surface-variant rounded-md focus:outline-none">{Math.round(zoom * 100)}%</button>
-        <button onclick={zoomIn} class="p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none"><span class="material-symbols-outlined text-[18px]">add</span></button>
+      <div class="flex items-center gap-0.5 md:gap-1 bg-surface-container rounded-lg p-0.5">
+        <button onclick={zoomOut} class="p-1 md:p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none"><span class="material-symbols-outlined text-[16px] md:text-[18px]">remove</span></button>
+        <button onclick={zoomFit} class="px-1.5 md:px-2 py-1 text-[11px] font-semibold text-on-surface-variant hover:bg-surface-variant rounded-md focus:outline-none">{Math.round(zoom * 100)}%</button>
+        <button onclick={zoomIn} class="p-1 md:p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none"><span class="material-symbols-outlined text-[16px] md:text-[18px]">add</span></button>
       </div>
 
       <!-- PDF page nav -->
       {#if isPdf && totalPages > 1}
-        <div class="flex items-center gap-1 bg-surface-container rounded-lg p-0.5">
-          <button onclick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} class="p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none disabled:opacity-30"><span class="material-symbols-outlined text-[18px]">chevron_left</span></button>
-          <span class="px-2 text-[11px] font-semibold text-on-surface-variant">{currentPage} / {totalPages}</span>
-          <button onclick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages} class="p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none disabled:opacity-30"><span class="material-symbols-outlined text-[18px]">chevron_right</span></button>
+        <div class="flex items-center gap-0.5 md:gap-1 bg-surface-container rounded-lg p-0.5">
+          <button onclick={() => goToPage(currentPage - 1)} disabled={currentPage <= 1} class="p-1 md:p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none disabled:opacity-30"><span class="material-symbols-outlined text-[16px] md:text-[18px]">chevron_left</span></button>
+          <span class="px-1.5 md:px-2 text-[11px] font-semibold text-on-surface-variant">{currentPage}/{totalPages}</span>
+          <button onclick={() => goToPage(currentPage + 1)} disabled={currentPage >= totalPages} class="p-1 md:p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none disabled:opacity-30"><span class="material-symbols-outlined text-[16px] md:text-[18px]">chevron_right</span></button>
         </div>
       {/if}
 
-      <!-- Actions -->
+      <!-- Mobile: pin toggle + feedback sheet toggle -->
       {#if !isApproved}
-        <button onclick={requestChanges} class="px-3 py-1.5 bg-[#fef3c7] text-[#b45309] rounded-lg text-[11px] font-bold hover:bg-[#fde68a] transition-colors focus:outline-none flex items-center gap-1">
-          <span class="material-symbols-outlined text-[14px]">edit</span> Request Changes
+        <button
+          onclick={() => pinModeActive = !pinModeActive}
+          class="md:hidden p-1.5 rounded-lg transition-colors focus:outline-none {pinModeActive ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant'}"
+          title={pinModeActive ? 'Disable pin mode' : 'Enable pin mode'}
+        >
+          <span class="material-symbols-outlined text-[18px]">push_pin</span>
         </button>
-        {#if userRole === 'client'}
-          <button onclick={approveDeliverable} class="px-3 py-1.5 bg-[#22c55e] text-white rounded-lg text-[11px] font-bold hover:bg-[#16a34a] transition-colors focus:outline-none flex items-center gap-1">
-            <span class="material-symbols-outlined text-[14px]">check_circle</span> Approve
-          </button>
-        {/if}
-      {:else}
-        <span class="px-3 py-1.5 bg-[#dcfce7] text-[#166534] rounded-lg text-[11px] font-bold flex items-center gap-1">
-          <span class="material-symbols-outlined text-[14px]">verified</span> Approved
-        </span>
       {/if}
+      <button onclick={() => mobileSheetOpen = !mobileSheetOpen} class="md:hidden p-1.5 rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-variant focus:outline-none" title="Feedback panel">
+        <span class="material-symbols-outlined text-[18px]">chat</span>
+      </button>
+
+      <!-- Desktop actions: only client users can approve/request changes -->
+      <div class="hidden md:flex items-center gap-2">
+        {#if !isApproved}
+          {#if userRole === 'client'}
+            <button onclick={requestChanges} class="px-3 py-1.5 bg-[#fef3c7] text-[#b45309] rounded-lg text-[11px] font-bold hover:bg-[#fde68a] transition-colors focus:outline-none flex items-center gap-1">
+              <span class="material-symbols-outlined text-[14px]">edit</span> Request Changes
+            </button>
+            <button onclick={approveDeliverable} class="px-3 py-1.5 bg-[#22c55e] text-white rounded-lg text-[11px] font-bold hover:bg-[#16a34a] transition-colors focus:outline-none flex items-center gap-1">
+              <span class="material-symbols-outlined text-[14px]">check_circle</span> Approve
+            </button>
+          {:else}
+            <span class="{statusBadge(deliverable.status)} px-2.5 py-1 rounded-full text-[11px] font-bold">{statusLabel(deliverable.status)}</span>
+          {/if}
+        {:else}
+          <span class="px-3 py-1.5 bg-[#dcfce7] text-[#166534] rounded-lg text-[11px] font-bold flex items-center gap-1">
+            <span class="material-symbols-outlined text-[14px]">verified</span> Approved
+          </span>
+        {/if}
+      </div>
     </div>
   </div>
 
   <!-- Main content -->
   <div class="flex flex-1 overflow-hidden">
     <!-- Left: Canvas -->
-    <div class="flex-[7] overflow-auto bg-[#1a1a2e] flex items-start justify-center p-8" bind:this={canvasContainer}>
-      <div class="relative inline-block canvas-area" class:approved={isApproved} onclick={handleCanvasClick}>
+    <div class="flex-1 md:flex-[7] overflow-auto bg-[#1a1a2e] flex items-start justify-center p-4 md:p-8" bind:this={canvasContainer}>
+      <div class="relative inline-block canvas-area" class:approved={isApproved} class:pin-mode={pinModeActive} onclick={handleCanvasClick}>
         {#if isPdf}
           <canvas bind:this={pdfCanvas} class="block rounded shadow-lg" style="transform: origin top left;"></canvas>
           {#if pdfRendering}
@@ -582,9 +634,9 @@
           {/each}
         {/if}
 
-        <!-- New pin popover -->
+        <!-- New pin popover (desktop only — mobile uses bottom sheet) -->
         {#if newPinPos && !isApproved}
-          <div class="pin-popover" style="left: {newPinPos.x}%; top: {newPinPos.y}%;">
+          <div class="pin-popover hidden md:block" style="left: clamp(130px, {newPinPos.x}%, calc(100% - 130px)); top: {newPinPos.y}%;">
             <div class="pin-dot pin-unresolved mb-1 mx-auto" style="transform: translateX(-50%); margin-left: 50%;">
               <span class="material-symbols-outlined text-[14px]">add</span>
             </div>
@@ -597,6 +649,9 @@
                 class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
                 onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitPin(); } }}
               ></textarea>
+              {#if pinError}
+                <p class="text-xs text-error mt-1">{pinError}</p>
+              {/if}
               <div class="flex gap-2 mt-2">
                 <button onclick={cancelNewPin} class="flex-1 py-1.5 text-xs font-semibold text-on-surface-variant hover:bg-surface-variant rounded-lg transition-colors focus:outline-none">Cancel</button>
                 <button onclick={submitPin} disabled={submittingPin || !newPinContent.trim()} class="flex-1 py-1.5 text-xs font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors focus:outline-none">
@@ -609,8 +664,8 @@
       </div>
     </div>
 
-    <!-- Right: Pin Thread Panel -->
-    <div class="flex-[3] bg-white border-l border-outline-variant flex flex-col overflow-hidden min-w-[300px] max-w-[400px]">
+    <!-- Right: Pin Thread Panel (desktop only) -->
+    <div class="hidden md:flex flex-[3] bg-white border-l border-outline-variant flex-col overflow-hidden min-w-[300px] max-w-[400px]">
       <div class="px-4 py-2.5 border-b border-outline-variant shrink-0 flex items-center justify-between">
         <h3 class="text-sm font-medium text-on-surface">Feedback ({allPinsForList.length})</h3>
         <button
@@ -751,6 +806,112 @@
     </div>
   </div>
 </div>
+
+<!-- Mobile Bottom Sheet -->
+{#if mobileSheetOpen}
+  <div class="fixed inset-0 z-[250] md:hidden flex flex-col justify-end">
+    <div class="absolute inset-0 bg-black/40" onclick={() => { mobileSheetOpen = false; cancelNewPin(); }}></div>
+    <div class="relative bg-white rounded-t-2xl max-h-[70vh] flex flex-col animate-slideUp">
+      <div class="flex items-center justify-between px-4 py-3 border-b border-outline-variant shrink-0">
+        <h3 class="text-sm font-semibold text-on-surface">
+          {#if newPinPos}Add Feedback{:else}Feedback ({allPinsForList.length}){/if}
+        </h3>
+        <div class="flex items-center gap-2">
+          <!-- Pin filter in sheet -->
+          {#if !newPinPos}
+            <div class="flex bg-surface-container rounded-lg p-0.5 gap-0.5">
+              {#each [['all', 'All'], ['unresolved', 'Open'], ['resolved', 'Done']] as [val, label]}
+                <button onclick={() => pinFilter = val as any} class="px-2.5 py-1 rounded-md text-[11px] font-semibold transition-colors focus:outline-none {pinFilter === val ? 'bg-primary text-white' : 'text-on-surface-variant hover:bg-surface-variant'}">{label}</button>
+              {/each}
+            </div>
+          {/if}
+          <button onclick={() => { mobileSheetOpen = false; cancelNewPin(); }} class="p-1 rounded-lg hover:bg-surface-container">
+            <span class="material-symbols-outlined text-[20px]">close</span>
+          </button>
+        </div>
+      </div>
+
+      {#if newPinPos}
+        <!-- New pin form in bottom sheet -->
+        <div class="p-4" onclick={(e) => e.stopPropagation()}>
+          <textarea
+            bind:this={newPinInput}
+            bind:value={newPinContent}
+            placeholder="Add your feedback..."
+            rows="3"
+            class="w-full px-3 py-2 bg-surface-container-low border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary resize-none"
+            onkeydown={(e) => { if (e.key === 'Enter' && !e.shiftKey) { e.preventDefault(); submitPin(); } }}
+          ></textarea>
+          {#if pinError}
+            <p class="text-xs text-error mt-1">{pinError}</p>
+          {/if}
+          <div class="flex gap-2 mt-2">
+            <button onclick={() => { cancelNewPin(); mobileSheetOpen = false; }} class="flex-1 py-2.5 text-sm font-semibold text-on-surface-variant hover:bg-surface-variant rounded-lg transition-colors focus:outline-none">Cancel</button>
+            <button onclick={submitPin} disabled={submittingPin || !newPinContent.trim()} class="flex-1 py-2.5 text-sm font-semibold bg-primary text-white rounded-lg hover:bg-primary/90 disabled:opacity-50 transition-colors focus:outline-none">
+              {submittingPin ? 'Adding...' : 'Add Pin'}
+            </button>
+          </div>
+        </div>
+      {:else}
+        <!-- Pin list -->
+        <div class="flex-1 overflow-y-auto">
+          {#if allPinsForList.length === 0}
+            <div class="flex flex-col items-center justify-center py-10 px-4 text-center">
+              <span class="material-symbols-outlined text-3xl text-outline-variant mb-2">push_pin</span>
+              <p class="text-sm text-on-surface-variant">No pins yet. Tap the pin button then tap on the image.</p>
+            </div>
+          {/if}
+
+          {#each allPinsForList as pin, idx (pin.id)}
+            {@const replies = pinReplies[pin.id] || []}
+            <div class="border-b border-outline-variant/10 {selectedPinId === pin.id ? 'bg-primary/5' : ''}">
+              <button class="w-full text-left px-4 py-3 flex items-start gap-3 focus:outline-none" onclick={() => { scrollToCanvasPin(pin); }}>
+                <div class="pin-dot {pin.is_resolved ? 'pin-resolved' : 'pin-unresolved'} shrink-0" style="width: 22px; height: 22px; font-size: 9px;">
+                  {#if pin.is_resolved}<span class="material-symbols-outlined text-[11px]">check</span>{:else}{idx + 1}{/if}
+                </div>
+                <div class="flex-1 min-w-0">
+                  <div class="flex items-center gap-1.5 mb-0.5">
+                    <span class="text-xs font-bold text-on-surface">{pin.author_name}</span>
+                    <span class="text-[10px] text-outline">{pin.author_type}</span>
+                  </div>
+                  <p class="text-xs text-on-surface leading-relaxed">{pin.content}</p>
+                </div>
+              </button>
+              {#if replies.length > 0}
+                <div class="px-4 pb-2 ml-7 space-y-1.5">
+                  {#each replies as reply (reply.id)}
+                    <div class="flex items-start gap-1.5 bg-surface-container-low rounded-lg p-1.5">
+                      <span class="text-[10px] font-bold text-on-surface">{reply.author_name}:</span>
+                      <p class="text-[11px] text-on-surface-variant">{reply.content}</p>
+                    </div>
+                  {/each}
+                </div>
+              {/if}
+              {#if !isApproved}
+                <div class="px-4 pb-2 ml-7">
+                  <form class="flex gap-1.5" onsubmit={(e) => { e.preventDefault(); submitReply(pin.id); }}>
+                    <input type="text" placeholder="Reply..." bind:value={replyContent[pin.id]} class="flex-1 px-2.5 py-2 bg-surface-container-low border border-outline-variant/30 rounded-lg text-xs text-on-surface focus:outline-none focus:border-primary" />
+                    <button type="submit" disabled={submittingReply === pin.id || !replyContent[pin.id]?.trim()} class="px-2.5 py-2 bg-primary text-white rounded-lg text-xs font-semibold hover:bg-primary/90 disabled:opacity-50 focus:outline-none shrink-0">
+                      <span class="material-symbols-outlined text-[14px]">send</span>
+                    </button>
+                  </form>
+                </div>
+              {/if}
+            </div>
+          {/each}
+        </div>
+
+        <!-- Mobile approve/request buttons -->
+        {#if userRole === 'client' && !isApproved}
+          <div class="border-t border-outline-variant p-3 flex gap-2 shrink-0">
+            <button onclick={requestChanges} class="flex-1 py-2.5 bg-[#fef3c7] text-[#b45309] rounded-lg text-sm font-bold hover:bg-[#fde68a] transition-colors focus:outline-none">Request Changes</button>
+            <button onclick={approveDeliverable} class="flex-1 py-2.5 bg-[#22c55e] text-white rounded-lg text-sm font-bold hover:bg-[#16a34a] transition-colors focus:outline-none">Approve</button>
+          </div>
+        {/if}
+      {/if}
+    </div>
+  </div>
+{/if}
 
 {#if toastMsg}
   <div class="fixed bottom-5 left-1/2 -translate-x-1/2 z-[300] px-4 py-2.5 rounded-lg shadow-md flex items-center gap-2 text-sm animate-fadeIn {toastType === 'success' ? 'bg-on-surface text-surface' : 'bg-white border border-error/20 text-on-surface'}">

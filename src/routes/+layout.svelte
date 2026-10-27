@@ -144,7 +144,7 @@
 <button
 	onclick={globalReload}
 	disabled={isReloading}
-	class="fixed bottom-5 right-5 z-[9999] w-10 h-10 bg-white text-on-surface-variant hover:text-primary border border-outline-variant rounded-lg shadow-sm flex items-center justify-center transition-colors disabled:opacity-40"
+	class="fixed bottom-20 right-3 md:bottom-5 md:right-5 z-[9999] w-9 h-9 md:w-10 md:h-10 bg-white text-on-surface-variant hover:text-primary border border-outline-variant rounded-lg shadow-sm flex items-center justify-center transition-colors disabled:opacity-40"
 	title="Reload all data"
 >
 	<span class="material-symbols-outlined text-[20px] {isReloading ? 'animate-spin' : ''}">refresh</span>

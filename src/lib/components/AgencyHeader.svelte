@@ -17,6 +17,7 @@
 
   let userMenuOpen = $state(false);
   let notificationsOpen = $state(false);
+  let mobileDrawerOpen = $state(false);
 
   interface Notification {
     id: string;
@@ -113,6 +114,9 @@
     </div>
 
     <div class="flex items-center gap-2 relative">
+      <button class="md:hidden p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant" onclick={() => mobileDrawerOpen = true}>
+        <span class="material-symbols-outlined text-[22px]">menu</span>
+      </button>
       <div class="relative">
         <button
           class="text-on-surface-variant hover:text-on-surface transition-colors relative w-9 h-9 rounded-lg hover:bg-surface-container flex items-center justify-center"
@@ -214,3 +218,46 @@
     </div>
   </div>
 </div>
+
+{#if mobileDrawerOpen}
+  <div class="fixed inset-0 z-[100] md:hidden">
+    <div class="absolute inset-0 bg-black/40" onclick={() => mobileDrawerOpen = false}></div>
+    <nav class="absolute top-0 right-0 h-full w-72 bg-white shadow-xl flex flex-col animate-slideInRight">
+      <div class="flex items-center justify-between px-5 h-14 border-b border-outline-variant shrink-0">
+        <span class="text-sm font-semibold text-on-surface">{authState.agencyName || "ClientDesk"}</span>
+        <button class="p-1 rounded-lg hover:bg-surface-container" onclick={() => mobileDrawerOpen = false}>
+          <span class="material-symbols-outlined text-[20px]">close</span>
+        </button>
+      </div>
+      <div class="flex-1 overflow-y-auto py-2">
+        {#each tabs as tab}
+          <a
+            href={tabHref(tab)}
+            onclick={() => mobileDrawerOpen = false}
+            class="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors {activeTab === tab ? 'text-primary bg-primary/[0.04]' : 'text-on-surface-variant hover:bg-surface-container'}"
+          >
+            {tab}
+          </a>
+        {/each}
+        <div class="border-t border-outline-variant my-2"></div>
+        <a href="/settings" onclick={() => mobileDrawerOpen = false} class="flex items-center gap-3 px-5 py-3 text-sm text-on-surface-variant hover:bg-surface-container">
+          <span class="material-symbols-outlined text-[20px]">settings</span> Settings
+        </a>
+      </div>
+      <div class="border-t border-outline-variant p-4 shrink-0">
+        <div class="flex items-center gap-3 mb-3">
+          <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">
+            {(authState.userFullName || authState.user?.email || 'U').substring(0, 2).toUpperCase()}
+          </div>
+          <div class="min-w-0">
+            <p class="text-sm font-medium text-on-surface truncate">{authState.userFullName || "User"}</p>
+            <p class="text-xs text-on-surface-variant truncate">{authState.user?.email || ""}</p>
+          </div>
+        </div>
+        <button class="w-full text-left px-3 py-2 text-sm text-error hover:bg-error-container/30 rounded-lg transition-colors flex items-center gap-2" onclick={handleSignOut}>
+          <span class="material-symbols-outlined text-[18px]">logout</span> Sign Out
+        </button>
+      </div>
+    </nav>
+  </div>
+{/if}

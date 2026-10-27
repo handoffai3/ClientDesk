@@ -1,5 +1,5 @@
 <script lang="ts">
-  import NotificationBell from '$lib/components/NotificationBell.svelte';
+  import ClientHeader from '$lib/components/ClientHeader.svelte';
   import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { clientStore } from '$lib/clientStore';
@@ -8,11 +8,8 @@
   import { page } from '$app/stores';
   import { onMount } from 'svelte';
 
-  const navTabs = ['Dashboard', 'My Projects', 'Files', 'Invoices', 'Messages'];
-
   import { clientDataStore } from '../../../stores/clientData';
 
-  let userMenuOpen = $state(false);
   let activeFilter = $state('all');
   let selectedInvoice = $state<any>(null);
   let isModalOpen = $state(false);
@@ -51,15 +48,6 @@
   let pendingTotal = $derived(invoices.filter(i => i.status === 'pending' || i.status === 'sent').reduce((s, i) => s + Number(i.total || 0), 0));
   let paidTotal = $derived(invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total || 0), 0));
 
-  function tabHref(tab: string) {
-    if (tab === 'Dashboard') return '/client/dashboard';
-    if (tab === 'My Projects') return '/client/projects';
-    if (tab === 'Files') return '/client/files';
-    if (tab === 'Invoices') return '/client/invoices';
-    if (tab === 'Messages') return '/client/messages';
-    return '/client/dashboard';
-  }
-
   function fmt(n: number) {
     return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
   }
@@ -69,12 +57,6 @@
   }
 
   function initials(name: string | null) { return name?.substring(0, 2).toUpperCase() || 'NA'; }
-
-  async function handleSignOut() {
-    userMenuOpen = false;
-    await supabase.auth.signOut();
-    goto('/client/login');
-  }
 
   function openInvoiceModal(inv: any) {
     selectedInvoice = inv;
@@ -149,44 +131,7 @@
 
 <!-- Main Interface -->
 <div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex overflow-hidden w-full {isPrinting ? 'print-hide' : ''}">
-  <!-- Top Nav -->
-  <div class="fixed top-0 w-full z-50 flex justify-between items-center px-6 h-14 bg-white border-b border-outline-variant">
-    <div class="flex items-center gap-8 w-full max-w-container-max mx-auto justify-between">
-      <div class="flex items-center gap-8">
-        <a href="/client/dashboard" class="flex items-center">
-          {#if agencyLogo}
-            <img src={agencyLogo} alt="{agencyName} Logo" class="h-7 max-w-[140px] object-contain" />
-          {:else}
-            <span class="text-[15px] font-semibold text-on-surface tracking-tight">{agencyName}</span>
-          {/if}
-        </a>
-        <nav class="hidden md:flex gap-1">
-          {#each navTabs as tab}
-            <a href={tabHref(tab)} class="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors {tab === 'Invoices' ? 'text-primary bg-primary/[0.06]' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}">{tab}</a>
-          {/each}
-        </nav>
-      </div>
-      <div class="flex items-center gap-2">
-        <NotificationBell />
-        <div class="relative">
-          <button class="flex items-center focus:outline-none" onclick={() => userMenuOpen = !userMenuOpen}>
-            <div class="w-8 h-8 rounded-full bg-primary/10 text-primary flex items-center justify-center text-xs font-medium">{initials($clientStore.full_name)}</div>
-          </button>
-          {#if userMenuOpen}
-            <div class="absolute right-0 top-11 w-52 bg-white border border-outline-variant rounded-lg shadow-dropdown py-1 z-50 animate-fadeIn">
-              <div class="px-4 py-2.5 border-b border-outline-variant">
-                <p class="text-sm font-medium text-on-surface">{$clientStore.full_name || 'Client'}</p>
-                <p class="text-xs text-on-surface-variant truncate mt-0.5">{authState.user?.email || ''}</p>
-              </div>
-              <button class="w-full text-left px-4 py-2 text-sm text-error hover:bg-error-container/30 transition-colors flex items-center gap-2" onclick={handleSignOut}>
-                <span class="material-symbols-outlined text-[18px]">logout</span> Sign Out
-              </button>
-            </div>
-          {/if}
-        </div>
-      </div>
-    </div>
-  </div>
+  <ClientHeader activeTab="Invoices" />
 
   <main class="flex-1 overflow-y-auto mt-14 px-6 py-6 max-w-container-max mx-auto w-full">
     {#if loading}

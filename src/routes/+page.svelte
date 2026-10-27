@@ -354,11 +354,11 @@
 
         <!-- Kanban Board -->
         <div
-          class="flex gap-4 overflow-x-auto pb-4 h-[calc(100vh-380px)] min-h-[400px]"
+          class="flex gap-4 overflow-x-auto pb-4 h-[calc(100vh-380px)] min-h-[400px] snap-x snap-mandatory md:snap-none"
         >
           {#each columns as column}
             <div
-              class="flex-none w-[300px] bg-surface-container-low rounded-lg p-3 flex flex-col {column.id === 'done' ? 'opacity-70' : ''}"
+              class="flex-none w-[300px] bg-surface-container-low rounded-lg p-3 flex flex-col snap-start {column.id === 'done' ? 'opacity-70' : ''}"
               ondragover={(e) => e.preventDefault()}
               ondrop={(e) => handleDrop(e, column.id)}
             >
@@ -657,7 +657,7 @@
               </a>
             </div>
 
-            <div class="grid grid-cols-3 gap-3">
+            <div class="grid grid-cols-1 sm:grid-cols-3 gap-3">
               <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
                 <div class="flex items-center gap-2 mb-2">
                   <div class="w-7 h-7 rounded-lg bg-success/[0.08] flex items-center justify-center">
