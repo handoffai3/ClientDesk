@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
+import { env as publicEnv } from '$env/dynamic/public';
 import { supabaseAdmin } from '$lib/server/supabase';
 
 export const POST: RequestHandler = async ({ request, url }) => {
@@ -24,7 +25,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
   const { data: invited, error } = await supabaseAdmin.auth.admin.inviteUserByEmail(email, {
     data: { agency_id: me.agency_id, role: 'member' },
-    redirectTo: `${url.origin}/login`
+    redirectTo: `${publicEnv.PUBLIC_SITE_URL || url.origin}/login`
   });
   if (error || !invited.user) return json({ message: error?.message || 'Invitation failed.' }, { status: 400 });
 

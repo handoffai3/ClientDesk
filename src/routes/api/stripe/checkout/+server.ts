@@ -1,5 +1,6 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env as publicEnv } from '$env/dynamic/public';
 import { stripe } from '$lib/server/stripe';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { requireCaller } from '$lib/server/auth';
@@ -66,7 +67,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
     });
   }
 
-  const origin = url.origin;
+  const origin = publicEnv.PUBLIC_SITE_URL || url.origin;
   const stripeAccount = invoice.agencies?.stripe_account_id || undefined;
 
   const sessionParams: any = {

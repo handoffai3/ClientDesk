@@ -1,10 +1,12 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
+import { env as publicEnv } from '$env/dynamic/public';
 import { stripe } from '$lib/server/stripe';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { requireCaller } from '$lib/server/auth';
 
 export const POST: RequestHandler = async ({ request, url }) => {
+  const siteUrl = publicEnv.PUBLIC_SITE_URL || url.origin;
   const caller = await requireCaller(request, ['agency']);
   if (caller.kind !== 'agency' || caller.role !== 'admin') {
     throw error(403, 'Only agency admins can manage payments.');
@@ -34,8 +36,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
     const accountLink = await stripe.accountLinks.create({
       account: account.id,
-      refresh_url: `${url.origin}/settings?stripe=refresh`,
-      return_url: `${url.origin}/settings?stripe=success`,
+      refresh_url: `${siteUrl}/settings?stripe=refresh`,
+      return_url: `${siteUrl}/settings?stripe=success`,
       type: 'account_onboarding',
     });
 

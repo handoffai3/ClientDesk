@@ -1,6 +1,7 @@
 import { json } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env } from '$env/dynamic/private';
+import { env as publicEnv } from '$env/dynamic/public';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { brandedEmail } from '$lib/emailTemplates';
 import { sendAgencyEmail } from '$lib/server/email';
@@ -20,6 +21,7 @@ async function findAuthUserByEmail(email: string) {
 }
 
 export const POST: RequestHandler = async ({ request, url }) => {
+  const siteUrl = publicEnv.PUBLIC_SITE_URL || url.origin;
   if (!env.SUPABASE_SERVICE_ROLE_KEY) {
     return fail(501, 'Portal invites need SUPABASE_SERVICE_ROLE_KEY to be set on the server.');
   }
@@ -86,7 +88,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
   const { data: link, error: genErr } = await supabaseAdmin.auth.admin.generateLink({
     type: 'magiclink',
     email,
-    options: { redirectTo: `${url.origin}/client/auth/callback` }
+    options: { redirectTo: `${siteUrl}/client/auth/callback` }
   });
   if (genErr || !link?.properties?.action_link) {
     return fail(500, genErr?.message || 'Could not generate a login link.', { portal_created: true });
@@ -105,7 +107,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
     agency_primary_color: agency?.primary_color || undefined,
     body_html: `<p>Hi ${client.full_name || 'there'},</p>
       <p>You've been invited to the <strong>${agencyName}</strong> client portal, where you can view your projects, files and invoices and message the team.</p>
-      <p>Click the button below to sign in. The link is single-use and expires soon. If it has expired, request a new one any time at <a href="${url.origin}/client/login?agency=${me.agency_id}">${url.origin}/client/login</a>.</p>`,
+      <p>Click the button below to sign in. The link is single-use and expires soon. If it has expired, request a new one any time at <a href="${siteUrl}/client/login?agency=${me.agency_id}">${siteUrl}/client/login</a>.</p>`,
     cta_text: 'Access Your Portal',
     cta_url: link.properties.action_link
   });
