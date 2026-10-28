@@ -75,6 +75,7 @@
   let newTaskPriority = $state<'high' | 'medium' | 'low'>('medium');
   let newTaskCategory = $state('');
   let newTaskColumn = $state<'today' | 'this_week' | 'done'>('today');
+  let newTaskVisibleToClient = $state(false);
   let savingTask = $state(false);
 
   // Messages tab
@@ -318,12 +319,13 @@
       description: newTaskDesc || null,
       category: newTaskCategory || null,
       priority: newTaskPriority,
-      status: newTaskColumn
+      status: newTaskColumn,
+      visible_to_client: newTaskVisibleToClient
     }).select('*').single();
     if (error) showToast('Could not create task: ' + error.message, 'error');
     else if (data) {
       if (!tasks.find(t => t.id === data.id)) tasks = [data, ...tasks];
-      newTaskTitle = ''; newTaskDesc = ''; newTaskCategory = ''; newTaskPriority = 'medium'; newTaskColumn = 'today';
+      newTaskTitle = ''; newTaskDesc = ''; newTaskCategory = ''; newTaskPriority = 'medium'; newTaskColumn = 'today'; newTaskVisibleToClient = false;
       showTaskForm = false;
     }
     savingTask = false;
@@ -1124,6 +1126,10 @@
                   </select>
                 </div>
               </div>
+              <label class="flex items-center gap-2 cursor-pointer">
+                <input type="checkbox" bind:checked={newTaskVisibleToClient} class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary" />
+                <span class="text-xs font-medium text-on-surface-variant">Show to client</span>
+              </label>
               <div class="flex justify-end">
                 <button type="submit" disabled={savingTask || !newTaskTitle.trim()} class="px-4 py-1.5 bg-primary hover:bg-primary-hover text-white rounded-lg text-sm font-medium disabled:opacity-50">{savingTask ? 'Saving...' : 'Create Task'}</button>
               </div>
@@ -1150,6 +1156,7 @@
                       <span class="px-1.5 py-0.5 rounded text-[10px] font-medium {t.priority === 'high' ? 'bg-error-container text-on-error-container' : t.priority === 'low' ? 'bg-surface-container text-on-surface-variant' : 'bg-tertiary-container text-on-tertiary-container'}">{t.priority || 'medium'}</span>
                       {#if t.category}<span class="px-1.5 py-0.5 rounded bg-primary/[0.08] text-primary text-[10px] font-medium">{t.category}</span>{/if}
                       <span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-medium">{t.status === 'this_week' ? 'This week' : t.status === 'done' ? 'Done' : 'Today'}</span>
+                      {#if t.visible_to_client}<span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-success/10 text-success"><span class="material-symbols-outlined text-[12px]">visibility</span> Client</span>{/if}
                     </div>
                   </div>
                   <button onclick={() => deleteTask(t)} class="text-on-surface-variant hover:text-error shrink-0" title="Delete task"><span class="material-symbols-outlined text-[18px]">delete</span></button>

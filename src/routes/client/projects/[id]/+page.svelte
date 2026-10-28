@@ -525,33 +525,59 @@
           {/if}
         </div>
 
-      <!-- Tasks Tab -->
+      <!-- Tasks Tab (read-only, only visible_to_client tasks via RLS) -->
       {:else if activeTab === 'Tasks'}
-        <div class="space-y-4 animate-fadeIn">
-          <h3 class="text-sm font-medium text-on-surface">Tasks ({tasks.filter(t => t.status !== 'done').length} open, {tasks.filter(t => t.status === 'done').length} done)</h3>
+        {@const openTasks = tasks.filter(t => t.status !== 'done')}
+        {@const doneTasks = tasks.filter(t => t.status === 'done')}
+        <div class="space-y-5 animate-fadeIn">
+          <h3 class="text-sm font-medium text-on-surface">Shared Tasks ({openTasks.length} open, {doneTasks.length} done)</h3>
           {#if tasks.length === 0}
             <div class="py-14 text-center border border-dashed border-outline-variant rounded-lg">
               <span class="material-symbols-outlined text-[28px] text-outline mb-2 block">task_alt</span>
-              <p class="text-sm font-medium text-on-surface mb-1">No tasks yet</p>
-              <p class="text-[13px] text-on-surface-variant">Your agency's tasks for this project will show up here.</p>
+              <p class="text-sm font-medium text-on-surface mb-1">No shared tasks yet</p>
+              <p class="text-[13px] text-on-surface-variant">Tasks your agency shares with you will appear here.</p>
             </div>
           {:else}
-            <div class="bg-white border border-outline-variant rounded-lg shadow-xs divide-y divide-outline-variant">
-              {#each tasks as t (t.id)}
-                <div class="flex items-start gap-3 px-4 py-3">
-                  <span class="material-symbols-outlined text-[20px] mt-0.5 shrink-0 {t.status === 'done' ? 'text-success' : 'text-outline'}" style={t.status === 'done' ? "font-variation-settings: 'FILL' 1;" : ''}>{t.status === 'done' ? 'check_circle' : 'radio_button_unchecked'}</span>
-                  <div class="flex-1 min-w-0">
-                    <p class="text-sm font-medium {t.status === 'done' ? 'line-through text-on-surface-variant' : 'text-on-surface'}">{t.title}</p>
-                    {#if t.description}<p class="text-[13px] text-on-surface-variant mt-0.5">{t.description}</p>{/if}
-                    <div class="flex flex-wrap gap-1.5 mt-1.5">
-                      <span class="px-1.5 py-0.5 rounded text-[10px] font-medium {t.priority === 'high' ? 'bg-error-container text-on-error-container' : t.priority === 'low' ? 'bg-surface-container text-on-surface-variant' : 'bg-tertiary-container text-on-tertiary-container'}">{t.priority || 'medium'}</span>
-                      {#if t.category}<span class="px-1.5 py-0.5 rounded bg-primary/[0.08] text-primary text-[10px] font-medium">{t.category}</span>{/if}
-                      <span class="px-1.5 py-0.5 rounded bg-surface-container text-on-surface-variant text-[10px] font-medium">{t.status === 'this_week' ? 'This week' : t.status === 'done' ? 'Done' : 'Today'}</span>
+            {#if openTasks.length > 0}
+              <div>
+                <h4 class="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">Open</h4>
+                <div class="bg-white border border-outline-variant rounded-lg shadow-xs divide-y divide-outline-variant">
+                  {#each openTasks as t (t.id)}
+                    <div class="flex items-start gap-3 px-4 py-3">
+                      <span class="material-symbols-outlined text-[20px] mt-0.5 shrink-0 text-outline">radio_button_unchecked</span>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-on-surface">{t.title}</p>
+                        {#if t.description}<p class="text-[13px] text-on-surface-variant mt-0.5">{t.description}</p>{/if}
+                        <div class="flex flex-wrap gap-1.5 mt-1.5">
+                          <span class="px-1.5 py-0.5 rounded text-[10px] font-medium {t.priority === 'high' ? 'bg-error-container text-on-error-container' : t.priority === 'low' ? 'bg-surface-container text-on-surface-variant' : 'bg-tertiary-container text-on-tertiary-container'}">{t.priority || 'medium'}</span>
+                          {#if t.category}<span class="px-1.5 py-0.5 rounded bg-primary/[0.08] text-primary text-[10px] font-medium">{t.category}</span>{/if}
+                        </div>
+                      </div>
                     </div>
-                  </div>
+                  {/each}
                 </div>
-              {/each}
-            </div>
+              </div>
+            {/if}
+            {#if doneTasks.length > 0}
+              <div>
+                <h4 class="text-xs font-semibold text-on-surface-variant uppercase tracking-wider mb-2">Done</h4>
+                <div class="bg-white border border-outline-variant rounded-lg shadow-xs divide-y divide-outline-variant">
+                  {#each doneTasks as t (t.id)}
+                    <div class="flex items-start gap-3 px-4 py-3">
+                      <span class="material-symbols-outlined text-[20px] mt-0.5 shrink-0 text-success" style="font-variation-settings: 'FILL' 1;">check_circle</span>
+                      <div class="flex-1 min-w-0">
+                        <p class="text-sm font-medium text-on-surface-variant line-through">{t.title}</p>
+                        {#if t.description}<p class="text-[13px] text-on-surface-variant mt-0.5">{t.description}</p>{/if}
+                        <div class="flex flex-wrap gap-1.5 mt-1.5">
+                          <span class="px-1.5 py-0.5 rounded text-[10px] font-medium {t.priority === 'high' ? 'bg-error-container text-on-error-container' : t.priority === 'low' ? 'bg-surface-container text-on-surface-variant' : 'bg-tertiary-container text-on-tertiary-container'}">{t.priority || 'medium'}</span>
+                          {#if t.category}<span class="px-1.5 py-0.5 rounded bg-primary/[0.08] text-primary text-[10px] font-medium">{t.category}</span>{/if}
+                        </div>
+                      </div>
+                    </div>
+                  {/each}
+                </div>
+              </div>
+            {/if}
           {/if}
         </div>
 

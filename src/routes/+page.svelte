@@ -33,6 +33,7 @@
     tagClass: string;
     comments: number;
     assignees: string[];
+    visible_to_client: boolean;
   }
 
   // Column interface
@@ -70,6 +71,7 @@
   let newTaskPriority = $state('medium');
   let newTaskCategory = $state('');
   let newTaskColumn = $state('today');
+  let newTaskVisibleToClient = $state(false);
   // Keep for backwards compat with old modal references
   let newTaskTag = $state('Development');
 
@@ -136,7 +138,8 @@
       tag: t.category || '',
       tagClass: tagsConfig[t.category as keyof typeof tagsConfig] || 'bg-[#eff6ff] text-[#2563eb]',
       comments: 0,
-      assignees: []
+      assignees: [],
+      visible_to_client: t.visible_to_client || false
     };
   }
 
@@ -151,7 +154,8 @@
         description: newTaskDescription,
         category: newTaskCategory || null,
         status: newTaskColumn,
-        priority: newTaskPriority
+        priority: newTaskPriority,
+        visible_to_client: newTaskVisibleToClient
       })
       .select('*')
       .single();
@@ -170,6 +174,7 @@
     newTaskPriority = 'medium';
     newTaskCategory = '';
     newTaskColumn = 'today';
+    newTaskVisibleToClient = false;
     isModalOpen = false;
   }
 
@@ -390,6 +395,11 @@
                           class="inline-block px-1.5 py-0.5 rounded text-[11px] font-medium bg-[#eff6ff] text-[#2563eb]"
                         >
                           {task.category}
+                        </span>
+                      {/if}
+                      {#if task.visible_to_client}
+                        <span class="inline-flex items-center gap-0.5 px-1.5 py-0.5 rounded text-[10px] font-medium bg-success/10 text-success">
+                          <span class="material-symbols-outlined text-[12px]">visibility</span> Client
                         </span>
                       {/if}
                     </div>
@@ -804,6 +814,11 @@
               <option value="done">Done</option>
             </select>
           </div>
+
+          <label class="flex items-center gap-2 cursor-pointer">
+            <input type="checkbox" bind:checked={newTaskVisibleToClient} class="w-4 h-4 rounded border-outline-variant text-primary focus:ring-primary" />
+            <span class="text-xs font-semibold text-on-surface-variant">Show to client</span>
+          </label>
 
           <div class="flex gap-3 justify-end pt-4 border-t border-outline-variant mt-5">
             <button

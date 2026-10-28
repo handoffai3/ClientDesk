@@ -80,6 +80,7 @@ create table tasks (
   category text,
   status text check (status in ('today', 'this_week', 'done')) default 'today',
   assigned_to uuid references users(id),
+  visible_to_client boolean default false,
   created_at timestamp default now()
 );
 
@@ -512,9 +513,12 @@ CREATE POLICY "agency_own_tasks" ON tasks FOR ALL
 
 DROP POLICY IF EXISTS "client_view_tasks" ON tasks;
 CREATE POLICY "client_view_tasks" ON tasks FOR SELECT
-  USING (project_id IN (
-    SELECT id FROM projects WHERE client_id IN (SELECT client_id FROM client_users WHERE id = auth.uid())
-  ));
+  USING (
+    visible_to_client = true
+    AND project_id IN (
+      SELECT id FROM projects WHERE client_id IN (SELECT client_id FROM client_users WHERE id = auth.uid())
+    )
+  );
 
 -- MESSAGES
 DROP POLICY IF EXISTS "agency_own_messages" ON messages;
