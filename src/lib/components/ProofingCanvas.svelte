@@ -3,6 +3,7 @@
   import { supabase } from '$lib/supabaseClient';
   import { onMount } from 'svelte';
   import { sendBrandedEmail } from '$lib/emailTemplates';
+  import { proofingOpen } from '$lib/proofingOpen';
 
   let {
     deliverable,
@@ -150,6 +151,7 @@
   }
 
   onMount(() => {
+    proofingOpen.set(true);
     let channel: any;
 
     (async () => {
@@ -183,7 +185,7 @@
         .subscribe();
     })();
 
-    return () => { if (channel) supabase.removeChannel(channel); };
+    return () => { proofingOpen.set(false); if (channel) supabase.removeChannel(channel); };
   });
 
   async function loadPins() {
@@ -437,6 +439,13 @@
   function zoomOut() { zoom = Math.max(zoom - 0.25, 0.5); if (isPdf && pdfDoc) renderPdfPage(currentPage); }
   function zoomFit() { zoom = 1; if (isPdf && pdfDoc) renderPdfPage(currentPage); }
 
+  async function reopenDeliverable() {
+    const now = new Date().toISOString();
+    await supabase.from('deliverables').update({ status: 'pending', updated_at: now }).eq('id', deliverable.id);
+    onStatusChange('pending', { status: 'pending', updated_at: now });
+    showToast('Deliverable reopened');
+  }
+
   async function goToPage(page: number) {
     if (page < 1 || page > totalPages) return;
     currentPage = page;
@@ -511,6 +520,7 @@
   }
   .animate-slideUp { animation: slideUp 0.25s ease-out forwards; }
   .thread-resolved .thread-content { text-decoration: line-through; }
+  .safe-bottom { padding-bottom: env(safe-area-inset-bottom, 0px); }
 </style>
 
 <div class="proofing-overlay">
@@ -521,11 +531,11 @@
         <span class="material-symbols-outlined text-[20px] md:text-[24px]">close</span>
       </button>
       <div class="min-w-0">
-        <h2 class="text-xs md:text-sm font-semibold text-on-surface truncate">{deliverable.title}</h2>
-        <div class="flex items-center gap-2 mt-0.5">
-          <span class="{statusBadge(deliverable.status)} px-2 py-0.5 rounded-full text-[10px] font-bold uppercase">{statusLabel(deliverable.status)}</span>
-          <span class="text-[11px] text-outline hidden md:inline">v{deliverable.version}</span>
-          <span class="text-[11px] text-outline">{pins.length} pin{pins.length !== 1 ? 's' : ''}</span>
+        <h2 class="text-xs md:text-sm font-semibold text-on-surface truncate max-w-[150px] md:max-w-none">{deliverable.title}</h2>
+        <div class="flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
+          <span class="{statusBadge(deliverable.status)} px-1.5 md:px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold uppercase whitespace-nowrap">{statusLabel(deliverable.status)}</span>
+          <span class="text-[10px] md:text-[11px] text-outline hidden md:inline">v{deliverable.version}</span>
+          <span class="text-[10px] md:text-[11px] text-outline whitespace-nowrap">{pins.length} pin{pins.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
     </div>
@@ -541,8 +551,9 @@
       <!-- Zoom -->
       <div class="flex items-center gap-0.5 md:gap-1 bg-surface-container rounded-lg p-0.5">
         <button onclick={zoomOut} class="p-1 md:p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none"><span class="material-symbols-outlined text-[16px] md:text-[18px]">remove</span></button>
-        <button onclick={zoomFit} class="px-1.5 md:px-2 py-1 text-[11px] font-semibold text-on-surface-variant hover:bg-surface-variant rounded-md focus:outline-none">{Math.round(zoom * 100)}%</button>
+        <span class="px-1 md:px-1.5 text-[11px] font-semibold text-on-surface-variant select-none">{Math.round(zoom * 100)}%</span>
         <button onclick={zoomIn} class="p-1 md:p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none"><span class="material-symbols-outlined text-[16px] md:text-[18px]">add</span></button>
+        <button onclick={zoomFit} class="p-1 md:p-1.5 rounded-md hover:bg-surface-variant text-on-surface-variant focus:outline-none" title="Fit to screen"><span class="material-symbols-outlined text-[16px] md:text-[18px]">fit_screen</span></button>
       </div>
 
       <!-- PDF page nav -->
@@ -558,10 +569,10 @@
       {#if !isApproved}
         <button
           onclick={() => pinModeActive = !pinModeActive}
-          class="md:hidden p-1.5 rounded-lg transition-colors focus:outline-none {pinModeActive ? 'bg-primary text-white' : 'bg-surface-container text-on-surface-variant'}"
+          class="md:hidden p-1.5 rounded-lg transition-colors focus:outline-none {pinModeActive ? 'bg-primary text-white ring-2 ring-primary/40 ring-offset-1' : 'bg-surface-container text-on-surface-variant'}"
           title={pinModeActive ? 'Disable pin mode' : 'Enable pin mode'}
         >
-          <span class="material-symbols-outlined text-[18px]">push_pin</span>
+          <span class="material-symbols-outlined text-[18px]" style={pinModeActive ? "font-variation-settings: 'FILL' 1;" : ''}>push_pin</span>
         </button>
       {/if}
       <button onclick={() => mobileSheetOpen = !mobileSheetOpen} class="md:hidden p-1.5 rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-variant focus:outline-none" title="Feedback panel">
@@ -580,6 +591,11 @@
             </button>
           {:else}
             <span class="{statusBadge(deliverable.status)} px-2.5 py-1 rounded-full text-[11px] font-bold">{statusLabel(deliverable.status)}</span>
+            {#if deliverable.status === 'changes_requested'}
+              <button onclick={reopenDeliverable} class="px-3 py-1.5 bg-surface-container text-on-surface-variant rounded-lg text-[11px] font-bold hover:bg-surface-variant transition-colors focus:outline-none flex items-center gap-1">
+                <span class="material-symbols-outlined text-[14px]">refresh</span> Reopen
+              </button>
+            {/if}
           {/if}
         {:else}
           <span class="px-3 py-1.5 bg-[#dcfce7] text-[#166534] rounded-lg text-[11px] font-bold flex items-center gap-1">
@@ -593,7 +609,12 @@
   <!-- Main content -->
   <div class="flex flex-1 overflow-hidden">
     <!-- Left: Canvas -->
-    <div class="flex-1 md:flex-[7] overflow-auto bg-[#1a1a2e] flex items-start justify-center p-4 md:p-8" bind:this={canvasContainer}>
+    <div class="flex-1 md:flex-[7] overflow-auto bg-[#1a1a2e] flex items-center justify-center p-4 md:p-8 {userRole === 'client' && !isApproved ? 'pb-20 md:pb-8' : ''}" bind:this={canvasContainer}>
+      {#if pinModeActive}
+        <div class="fixed top-14 left-1/2 -translate-x-1/2 z-[210] md:hidden bg-primary text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-1.5 animate-fadeIn">
+          <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">push_pin</span> Pin mode on — tap the image
+        </div>
+      {/if}
       <div class="relative inline-block canvas-area" class:approved={isApproved} class:pin-mode={pinModeActive} onclick={handleCanvasClick}>
         {#if isPdf}
           <canvas bind:this={pdfCanvas} class="block rounded shadow-lg" style="transform: origin top left;"></canvas>
@@ -807,6 +828,18 @@
   </div>
 </div>
 
+<!-- Mobile sticky bottom action bar (client only, not approved) -->
+{#if userRole === 'client' && !isApproved}
+  <div class="fixed bottom-0 left-0 right-0 z-[240] md:hidden bg-white border-t border-outline-variant px-4 py-2.5 flex gap-2 safe-bottom">
+    <button onclick={requestChanges} class="flex-1 py-2.5 bg-[#fef3c7] text-[#b45309] rounded-lg text-sm font-bold hover:bg-[#fde68a] transition-colors focus:outline-none flex items-center justify-center gap-1.5">
+      <span class="material-symbols-outlined text-[16px]">edit</span> Request Changes
+    </button>
+    <button onclick={approveDeliverable} class="flex-1 py-2.5 bg-[#22c55e] text-white rounded-lg text-sm font-bold hover:bg-[#16a34a] transition-colors focus:outline-none flex items-center justify-center gap-1.5">
+      <span class="material-symbols-outlined text-[16px]">check_circle</span> Approve
+    </button>
+  </div>
+{/if}
+
 <!-- Mobile Bottom Sheet -->
 {#if mobileSheetOpen}
   <div class="fixed inset-0 z-[250] md:hidden flex flex-col justify-end">
@@ -901,11 +934,12 @@
           {/each}
         </div>
 
-        <!-- Mobile approve/request buttons -->
-        {#if userRole === 'client' && !isApproved}
-          <div class="border-t border-outline-variant p-3 flex gap-2 shrink-0">
-            <button onclick={requestChanges} class="flex-1 py-2.5 bg-[#fef3c7] text-[#b45309] rounded-lg text-sm font-bold hover:bg-[#fde68a] transition-colors focus:outline-none">Request Changes</button>
-            <button onclick={approveDeliverable} class="flex-1 py-2.5 bg-[#22c55e] text-white rounded-lg text-sm font-bold hover:bg-[#16a34a] transition-colors focus:outline-none">Approve</button>
+        <!-- Agency reopen in sheet -->
+        {#if userRole === 'agency' && deliverable.status === 'changes_requested'}
+          <div class="border-t border-outline-variant p-3 shrink-0">
+            <button onclick={reopenDeliverable} class="w-full py-2.5 bg-surface-container text-on-surface-variant rounded-lg text-sm font-bold hover:bg-surface-variant transition-colors focus:outline-none flex items-center justify-center gap-1.5">
+              <span class="material-symbols-outlined text-[16px]">refresh</span> Reopen
+            </button>
           </div>
         {/if}
       {/if}

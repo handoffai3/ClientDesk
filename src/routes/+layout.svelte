@@ -11,6 +11,7 @@
 	import { agencyDataStore } from '../stores/agencyData';
 	import { clientDataStore } from '../stores/clientData';
 	import { supabase } from '$lib/supabaseClient';
+	import { proofingOpen } from '$lib/proofingOpen';
 
 	let { children } = $props();
 
@@ -141,6 +142,7 @@
 	{@render children()}
 {/if}
 
+{#if !$proofingOpen}
 <button
 	onclick={globalReload}
 	disabled={isReloading}
@@ -149,6 +151,7 @@
 >
 	<span class="material-symbols-outlined text-[20px] {isReloading ? 'animate-spin' : ''}">refresh</span>
 </button>
+{/if}
 
 {#if globalError}
 	<div class="fixed top-4 left-1/2 -translate-x-1/2 z-[10000] bg-white border border-error/20 text-on-surface px-5 py-3 rounded-lg shadow-md flex items-center gap-3 text-sm max-w-md animate-fadeIn">
