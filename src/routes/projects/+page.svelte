@@ -38,6 +38,15 @@
   let clients = $derived($agencyDataStore.clients);
   let loadingProjects = $derived(!$agencyDataStore.loaded);
 
+  let clientFilterId = $derived($page.url.searchParams.get('client'));
+  let clientFilterName = $derived(clientFilterId ? ($agencyDataStore.clients.find(c => c.id === clientFilterId)?.full_name || 'Client') : null);
+
+  function clearClientFilter() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('client');
+    goto(url.pathname + url.search, { replaceState: true });
+  }
+
   // Derived filtered projects list
   let filteredProjects = $derived(
     projects.filter(p => {
@@ -126,12 +135,23 @@
       </button>
     </div>
 
+    {#if clientFilterName}
+      <div class="flex items-center gap-2 mb-3 animate-fadeIn">
+        <span class="inline-flex items-center gap-1.5 bg-primary/[0.08] text-primary pl-3 pr-1.5 py-1 rounded-lg text-[13px] font-medium">
+          Filtered: {clientFilterName}
+          <button onclick={clearClientFilter} class="w-5 h-5 rounded-full hover:bg-primary/20 flex items-center justify-center transition-colors" title="Clear filter">
+            <span class="material-symbols-outlined text-[14px]">close</span>
+          </button>
+        </span>
+      </div>
+    {/if}
+
     <div class="flex flex-col md:flex-row gap-3 mb-5">
       <div class="flex gap-1.5 overflow-x-auto pb-1 md:pb-0">
         {#each ['All', 'Active', 'Completed', 'On Hold'] as filterOption}
           <button
             onclick={() => activeFilter = filterOption as any}
-            class="px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors {activeFilter === filterOption ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
+            class="px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors {activeFilter === filterOption ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
           >
             {filterOption}
           </button>

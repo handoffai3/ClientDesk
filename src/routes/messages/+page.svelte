@@ -11,6 +11,14 @@
   import AgencyHeader from '$lib/components/AgencyHeader.svelte';
 
   let selectedClientId = $state<string | null>(null);
+  let clientFilterId = $derived($page.url.searchParams.get('client'));
+  let clientFilterName = $derived(clientFilterId ? ($agencyDataStore.clients.find(c => c.id === clientFilterId)?.full_name || 'Client') : null);
+
+  function clearClientFilter() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('client');
+    goto(url.pathname + url.search, { replaceState: true });
+  }
   let messageText = $state('');
   let sending = $state(false);
   let userMenuOpen = $state(false);
@@ -247,10 +255,22 @@
   <div class="flex flex-1 overflow-hidden max-w-container-max mx-auto w-full mt-14 bg-white border-x border-outline-variant">
     <!-- Left Panel: Conversations -->
     <div class="w-full md:w-[320px] lg:w-[360px] bg-surface-container-low flex flex-col h-full border-r border-outline-variant shrink-0">
-      <div class="px-4 py-3 border-b border-outline-variant flex items-center justify-between">
-        <h1 class="text-[15px] font-semibold text-on-surface">Messages</h1>
-        {#if totalUnread > 0}
-          <span class="bg-primary text-white px-2 py-0.5 rounded-md text-[11px] font-medium">{totalUnread}</span>
+      <div class="px-4 py-3 border-b border-outline-variant">
+        <div class="flex items-center justify-between">
+          <h1 class="text-[15px] font-semibold text-on-surface">Messages</h1>
+          {#if totalUnread > 0}
+            <span class="bg-primary text-on-primary px-2 py-0.5 rounded-md text-[11px] font-medium">{totalUnread}</span>
+          {/if}
+        </div>
+        {#if clientFilterName}
+          <div class="mt-2">
+            <span class="inline-flex items-center gap-1.5 bg-primary/[0.08] text-primary pl-2.5 pr-1.5 py-0.5 rounded-lg text-[12px] font-medium">
+              Filtered: {clientFilterName}
+              <button onclick={clearClientFilter} class="w-4 h-4 rounded-full hover:bg-primary/20 flex items-center justify-center transition-colors" title="Clear filter">
+                <span class="material-symbols-outlined text-[12px]">close</span>
+              </button>
+            </span>
+          </div>
         {/if}
       </div>
 

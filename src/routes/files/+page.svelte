@@ -29,6 +29,15 @@
 
   let projects = $derived($agencyDataStore.projects);
   let loadingFiles = $derived(!$agencyDataStore.loaded);
+
+  let clientFilterId = $derived($page.url.searchParams.get('client'));
+  let clientFilterName = $derived(clientFilterId ? ($agencyDataStore.clients.find(c => c.id === clientFilterId)?.full_name || 'Client') : null);
+
+  function clearClientFilter() {
+    const url = new URL(window.location.href);
+    url.searchParams.delete('client');
+    goto(url.pathname + url.search, { replaceState: true });
+  }
   let activeFolder = $state<string | null>(null);
   let userMenuOpen = $state(false);
 
@@ -182,6 +191,17 @@
         <span class="material-symbols-outlined text-[18px]">upload_file</span> Upload File
       </button>
     </div>
+
+    {#if clientFilterName}
+      <div class="flex items-center gap-2 mb-3 animate-fadeIn">
+        <span class="inline-flex items-center gap-1.5 bg-primary/[0.08] text-primary pl-3 pr-1.5 py-1 rounded-lg text-[13px] font-medium">
+          Filtered: {clientFilterName}
+          <button onclick={clearClientFilter} class="w-5 h-5 rounded-full hover:bg-primary/20 flex items-center justify-center transition-colors" title="Clear filter">
+            <span class="material-symbols-outlined text-[14px]">close</span>
+          </button>
+        </span>
+      </div>
+    {/if}
 
     <section class="grid grid-cols-2 sm:grid-cols-3 md:grid-cols-6 gap-3 mb-5">
       {#each folderOptions as folder}

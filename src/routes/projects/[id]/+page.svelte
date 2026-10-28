@@ -763,7 +763,7 @@
         {#each ['Overview', 'Deliverables', 'Files', 'Tasks', 'Messages'] as tab}
           <button
             onclick={() => activeTab = tab}
-            class="px-3 py-1 rounded-md text-[13px] font-medium shrink-0 transition-colors {activeTab === tab ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
+            class="px-3 py-1 rounded-md text-[13px] font-medium shrink-0 transition-colors {activeTab === tab ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
           >
             {tab}
             {#if tab === 'Deliverables' && deliverables.length > 0}

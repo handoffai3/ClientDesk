@@ -698,7 +698,7 @@
             </div>
 
             <div class="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1">
-              <button class="bg-primary text-white px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">All</button>
+              <button class="bg-primary text-on-primary px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">All</button>
               <button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">Paid</button>
               <button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">Pending</button>
               <button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">Overdue</button>
