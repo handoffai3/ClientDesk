@@ -476,7 +476,7 @@
               </button>
             </div>
 
-            <div class="flex gap-2 overflow-x-auto pb-1">
+            <div class="flex gap-2 tab-strip pb-1">
               <button class="px-3 py-1.5 rounded-md text-[13px] font-medium bg-primary/[0.08] text-primary whitespace-nowrap transition-colors focus:outline-none">All</button>
               <button class="px-3 py-1.5 rounded-md text-[13px] font-medium text-on-surface-variant hover:bg-surface-container whitespace-nowrap transition-colors focus:outline-none">Active</button>
               <button class="px-3 py-1.5 rounded-md text-[13px] font-medium text-on-surface-variant hover:bg-surface-container whitespace-nowrap transition-colors focus:outline-none">Completed</button>
@@ -697,7 +697,7 @@
               </div>
             </div>
 
-            <div class="flex items-center gap-1.5 mb-4 overflow-x-auto pb-1">
+            <div class="flex items-center gap-1.5 mb-4 tab-strip pb-1">
               <button class="bg-primary text-on-primary px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">All</button>
               <button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">Paid</button>
               <button class="text-on-surface-variant hover:text-on-surface hover:bg-surface-container px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors">Pending</button>

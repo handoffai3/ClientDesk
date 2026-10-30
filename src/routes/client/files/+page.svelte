@@ -13,7 +13,6 @@
 
   let totalFilesCount = $derived(files.length);
 
-  // Folder counts
   let folderCounts = $derived({
     'Designs': files.filter(f => f.folder === 'designs').length,
     'Contracts': files.filter(f => f.folder === 'contracts').length,
@@ -26,12 +25,8 @@
   let filteredFiles = $derived.by(() => {
     if (activeFolder === 'All') return files;
     const folderMap: Record<string, string> = {
-      'Designs': 'designs',
-      'Contracts': 'contracts',
-      'Invoices': 'invoices',
-      'Reports': 'reports',
-      'Brand Assets': 'brand_assets',
-      'My Uploads': 'client_uploads'
+      'Designs': 'designs', 'Contracts': 'contracts', 'Invoices': 'invoices',
+      'Reports': 'reports', 'Brand Assets': 'brand_assets', 'My Uploads': 'client_uploads'
     };
     return files.filter(f => f.folder === folderMap[activeFolder]);
   });
@@ -61,16 +56,14 @@
   }
 
   function fmtDate(d: string | null) {
-    return d ? new Date(d).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A';
+    return d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A';
   }
 
   let toastMsg = $state('');
   let toastType = $state<'success' | 'error'>('success');
 
   function showToast(msg: string, type: 'success' | 'error' = 'success') {
-    toastMsg = msg;
-    toastType = type;
-    setTimeout(() => { toastMsg = ''; }, 3000);
+    toastMsg = msg; toastType = type; setTimeout(() => { toastMsg = ''; }, 3000);
   }
 
   function isLocked(file: any): boolean {
@@ -83,7 +76,7 @@
 
   let payingFileId = $state<string | null>(null);
   async function payForFile(file: any) {
-    if (!file.unlock_invoice_id) { goto('/client/invoices'); return; }
+    if (!file.unlock_invoice_id) return;
     payingFileId = file.id;
     try {
       const res = await apiFetch('/api/stripe/checkout', {
@@ -100,6 +93,19 @@
     payingFileId = null;
   }
 
+  let downloadingFileId = $state<string | null>(null);
+  async function downloadFile(file: any) {
+    downloadingFileId = file.id;
+    try {
+      const res = await apiFetch(`/api/files/${file.id}/download`);
+      const data = await res.json();
+      if (!res.ok) { showToast(data.message || 'Download failed', 'error'); downloadingFileId = null; return; }
+      window.open(data.url, '_blank');
+    } catch {
+      showToast('Download failed. Please try again.', 'error');
+    }
+    downloadingFileId = null;
+  }
 </script>
 
 <svelte:head>
@@ -119,7 +125,7 @@
       <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 animate-fadeIn">
         <div>
           <h1 class="text-xl font-semibold text-on-surface mb-1">My Files</h1>
-          <p class="text-sm text-on-surface-variant">{totalFilesCount} total files</p>
+          <p class="text-sm text-on-surface-variant">{totalFilesCount} total {totalFilesCount === 1 ? 'file' : 'files'}</p>
         </div>
       </div>
 
@@ -155,12 +161,11 @@
           {@const locked = isLocked(file)}
           <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant flex flex-col transition-colors {locked ? 'border-[#b45309]/30' : 'hover:border-primary/30'}">
             <div class="flex items-start gap-3 mb-3">
-              <div class="w-9 h-9 rounded-lg {icon.bg} {icon.text} flex items-center justify-center shrink-0 relative {locked ? 'opacity-50' : ''}">
-                <span class="material-symbols-outlined text-[18px]">{icon.icon}</span>
+              <div class="w-9 h-9 rounded-lg {locked ? 'bg-[#fef3c7]' : icon.bg} {locked ? 'text-[#b45309]' : icon.text} flex items-center justify-center shrink-0 relative">
                 {#if locked}
-                  <span class="absolute -top-1 -right-1 w-4 h-4 bg-[#b45309] rounded-full flex items-center justify-center">
-                    <span class="material-symbols-outlined text-white text-[10px]">lock</span>
-                  </span>
+                  <span class="material-symbols-outlined text-[18px]">lock</span>
+                {:else}
+                  <span class="material-symbols-outlined text-[18px]">{icon.icon}</span>
                 {/if}
               </div>
               <div class="flex-1 min-w-0">
@@ -182,15 +187,19 @@
                   <button onclick={() => goApprove(file)} class="bg-[#b45309] hover:bg-[#92400e] text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 transition-colors focus:outline-none">
                     <span class="material-symbols-outlined text-[14px]">thumb_up</span> Approve
                   </button>
-                {:else}
-                  <button onclick={() => payForFile(file)} disabled={payingFileId === file.id} class="bg-primary hover:bg-primary-hover text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 transition-colors focus:outline-none disabled:opacity-50">
+                {:else if file.unlock_invoice_id}
+                  <button onclick={() => payForFile(file)} disabled={payingFileId === file.id} class="bg-primary hover:bg-primary-hover text-on-primary px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 transition-colors focus:outline-none disabled:opacity-50">
                     <span class="material-symbols-outlined text-[14px]">payments</span> {payingFileId === file.id ? 'Redirecting...' : 'Pay'}
                   </button>
+                {:else}
+                  <span class="text-[11px] text-on-surface-variant italic flex items-center gap-1">
+                    <span class="material-symbols-outlined text-[12px]">hourglass_empty</span> Waiting for invoice
+                  </span>
                 {/if}
               {:else}
-                <a href={file.file_url} target="_blank" rel="noopener noreferrer" class="text-primary hover:bg-primary/[0.06] px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 transition-colors focus:outline-none">
-                  <span class="material-symbols-outlined text-[14px]">download</span> Download
-                </a>
+                <button onclick={() => downloadFile(file)} disabled={downloadingFileId === file.id} class="text-primary hover:bg-primary/[0.06] px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 transition-colors focus:outline-none disabled:opacity-50">
+                  <span class="material-symbols-outlined text-[14px]">download</span> {downloadingFileId === file.id ? 'Loading...' : 'Download'}
+                </button>
               {/if}
             </div>
           </div>

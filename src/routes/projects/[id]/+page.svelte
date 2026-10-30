@@ -759,7 +759,7 @@
         </div>
       {/if}
 
-      <div class="flex gap-1.5 border-b border-outline-variant overflow-x-auto no-scrollbar pb-2">
+      <div class="flex gap-1.5 border-b border-outline-variant tab-strip pb-2">
         {#each ['Overview', 'Deliverables', 'Files', 'Tasks', 'Messages'] as tab}
           <button
             onclick={() => activeTab = tab}

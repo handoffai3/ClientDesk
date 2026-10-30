@@ -50,22 +50,14 @@
     {#if loading}
       <div class="py-20 flex justify-center items-center"><div class="animate-spin rounded-full h-12 w-12 border-b-2 border-primary"></div></div>
     {:else}
-      <!-- Hero -->
-      <div class="bg-gradient-to-r from-[#7C3AED] to-[#EC4899] rounded-2xl p-8 text-white flex flex-col md:flex-row items-center justify-between shadow-lg mb-8 relative overflow-hidden">
-        <div class="absolute -right-20 -top-20 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
-        <div class="relative z-10">
-          <h1 class="font-display-md font-bold mb-2">My Projects</h1>
-          <p class="font-body-md text-white/90 flex items-center gap-2">
-            <span class="font-bold text-xl">{activeCount}</span> Active Projects
-          </p>
-        </div>
-        <div class="relative z-10 mt-4 md:mt-0 bg-white/10 backdrop-blur-md rounded-xl px-6 py-3 border border-white/20">
-          <span class="text-sm text-white/80">{new Date().toLocaleDateString('en-IN', { weekday: 'long', month: 'long', day: 'numeric', year: 'numeric' })}</span>
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 animate-fadeIn pt-1">
+        <div>
+          <h1 class="text-xl font-semibold text-on-surface mb-1">My Projects</h1>
+          <p class="text-sm text-on-surface-variant">{activeCount} active {activeCount === 1 ? 'project' : 'projects'}</p>
         </div>
       </div>
 
-      <!-- Filter Pills -->
-      <div class="flex space-x-2 overflow-x-auto pb-2 mb-8">
+      <div class="flex space-x-2 tab-strip pb-2 mb-5">
         {#each [
           { key: 'all', label: 'All' },
           { key: 'active', label: 'In Progress' },

@@ -147,7 +147,7 @@
     {/if}
 
     <div class="flex flex-col md:flex-row gap-3 mb-5">
-      <div class="flex gap-1.5 overflow-x-auto pb-1 md:pb-0">
+      <div class="flex gap-1.5 tab-strip pb-1 md:pb-0">
         {#each ['All', 'Active', 'Completed', 'On Hold'] as filterOption}
           <button
             onclick={() => activeFilter = filterOption as any}

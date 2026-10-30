@@ -254,7 +254,7 @@
     </div>
 
     <!-- Tab Pills -->
-    <div class="flex space-x-2 overflow-x-auto pb-2 mb-8">
+    <div class="flex space-x-2 tab-strip pb-2 mb-8">
       {#each ['Branding', 'Account', 'Notifications', 'Team', 'Payments', 'Email'] as tab}
         <button
           class="px-5 py-2.5 rounded-full font-label-md text-label-md whitespace-nowrap transition-all duration-150 focus:outline-none {activeTab === tab ? 'bg-primary text-white shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/30'}"

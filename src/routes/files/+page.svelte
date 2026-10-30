@@ -95,6 +95,7 @@
   async function handleUpload(e: Event) {
     e.preventDefault();
     if (!uploadFile) { uploadError = 'Please select a file.'; return; }
+    if (lockFile && unlockType === 'payment' && !unlockInvoiceId) { uploadError = 'Please select an invoice for payment-locked files.'; return; }
     uploading = true;
     uploadError = '';
     uploadProgress = 10;
@@ -120,6 +121,7 @@
       agency_id: authState.agencyId,
       file_name: uploadFile.name,
       file_url: fileUrl,
+      file_path: fileName,
       file_size: uploadFile.size,
       file_type: uploadFile.type,
       folder: uploadFolder,
@@ -364,9 +366,9 @@
               </div>
               {#if unlockType === 'payment'}
                 <div>
-                  <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="unlock-invoice">Link to Invoice (optional)</label>
+                  <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="unlock-invoice">Link to Invoice *</label>
                   <select id="unlock-invoice" bind:value={unlockInvoiceId} disabled={uploading} class="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg text-sm text-on-surface focus:outline-none focus:border-primary focus:ring-1 focus:ring-primary">
-                    <option value="">-- No specific invoice --</option>
+                    <option value="">-- Select an invoice --</option>
                     {#each invoicesList.filter(i => i.status !== 'paid') as inv (inv.id)}
                       <option value={inv.id}>{inv.invoice_number} - {inv.clients?.full_name || 'Unknown'}</option>
                     {/each}

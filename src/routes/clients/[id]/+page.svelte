@@ -347,7 +347,7 @@
         </div>
 
         <!-- Tabs -->
-        <div class="flex gap-1.5 overflow-x-auto pb-1 mb-5 no-scrollbar">
+        <div class="flex gap-1.5 tab-strip pb-1 mb-5">
           {#each validTabs as tab}
             <button
               onclick={() => activeTab = tab}

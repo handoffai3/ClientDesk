@@ -76,7 +76,6 @@
     }
   }
 
-  let dashArray = $derived(project ? `${project.progress || 0}, 100` : '0, 100');
 
   async function loadProject(clientId: string, agencyId: string) {
     loading = true;
@@ -268,7 +267,6 @@
 <svelte:head><title>{project?.name || 'Project'} - Client Portal</title></svelte:head>
 
 <style>
-  .gradient-hero { background: linear-gradient(135deg, #630ed4 0%, #d2bbff 100%); }
   .kanban-track { min-width: 280px; max-width: 360px; flex: 1; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
@@ -286,42 +284,34 @@
       <!-- Breadcrumb -->
       <a href="/client/projects" class="flex items-center gap-1 text-on-surface-variant hover:text-primary transition-colors text-sm"><span class="material-symbols-outlined text-[20px]">arrow_back</span> Back to Projects</a>
 
-      <!-- Hero -->
-      <div class="gradient-hero rounded-xl p-6 md:p-10 text-on-primary relative overflow-hidden">
-        <div class="absolute -right-20 -top-20 w-64 h-64 rounded-full bg-white/10 blur-2xl pointer-events-none"></div>
-        <div class="flex flex-col md:flex-row md:items-end justify-between gap-6 relative z-10">
-          <div class="space-y-3">
-            <span class="bg-secondary text-on-secondary px-3 py-1 rounded-full font-label-md text-label-md uppercase">{project.status === 'active' ? 'Active' : project.status === 'completed' ? 'Completed' : 'On Hold'}</span>
-            <div class="flex items-center gap-4">
-              <h2 class="font-display-lg text-headline-lg md:text-display-lg tracking-tight">{project.name}</h2>
-              <button
-                onclick={summarizeProject}
-                disabled={aiProjectSummarizing}
-                class="bg-white/10 hover:bg-white/20 text-white p-2 rounded-full transition-colors flex items-center justify-center disabled:opacity-50"
-                title="AI Project Summary"
-              >
-                <span class="material-symbols-outlined text-[20px] {aiProjectSummarizing ? 'animate-spin' : ''}">auto_awesome</span>
-              </button>
-              <button
-                onclick={manualReload}
-                disabled={loading}
-                class="bg-white/10 hover:bg-white/20 text-white p-2 rounded-full transition-colors flex items-center justify-center disabled:opacity-50"
-                title="Reload data"
-              >
-                <span class="material-symbols-outlined text-[20px] {loading ? 'animate-spin' : ''}">refresh</span>
-              </button>
-            </div>
-            {#if project.description}<p class="font-body-md text-white/80 max-w-xl">{project.description}</p>{/if}
+      <!-- Project header -->
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4">
+        <div class="flex-1 min-w-0">
+          <div class="flex items-center gap-2 mb-1">
+            <span class="text-[11px] font-medium px-1.5 py-0.5 rounded {project.status === 'active' ? 'bg-success/[0.08] text-success' : project.status === 'completed' ? 'bg-primary/[0.08] text-primary' : 'bg-surface-container text-on-surface-variant'}">{project.status === 'active' ? 'Active' : project.status === 'completed' ? 'Completed' : 'On Hold'}</span>
           </div>
-          <div class="flex items-center gap-4 bg-surface/10 backdrop-blur-md p-4 rounded-lg border border-white/20 shrink-0">
-            <div class="w-16 h-16 rounded-full border-4 border-primary-fixed-dim flex items-center justify-center relative">
-              <svg class="absolute inset-0 w-full h-full transform -rotate-90" viewBox="0 0 36 36">
-                <path class="text-white/20" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-width="3"></path>
-                <path class="text-white" d="M18 2.0845 a 15.9155 15.9155 0 0 1 0 31.831 a 15.9155 15.9155 0 0 1 0 -31.831" fill="none" stroke="currentColor" stroke-dasharray={dashArray} stroke-linecap="round" stroke-width="3"></path>
-              </svg>
-              <span class="font-title-md font-bold z-10">{project.progress || 0}%</span>
+          <div class="flex items-center gap-2">
+            <h2 class="text-lg font-semibold text-on-surface truncate">{project.name}</h2>
+            <button onclick={summarizeProject} disabled={aiProjectSummarizing} class="p-1.5 rounded-lg hover:bg-tertiary-container text-tertiary transition-colors focus:outline-none disabled:opacity-50" title="AI Summary">
+              <span class="material-symbols-outlined text-[18px] {aiProjectSummarizing ? 'animate-spin' : ''}">auto_awesome</span>
+            </button>
+            <button onclick={manualReload} disabled={loading} class="p-1.5 rounded-lg hover:bg-surface-container text-on-surface-variant transition-colors focus:outline-none disabled:opacity-50" title="Reload">
+              <span class="material-symbols-outlined text-[18px] {loading ? 'animate-spin' : ''}">refresh</span>
+            </button>
+          </div>
+          {#if project.description}<p class="text-sm text-on-surface-variant mt-1 line-clamp-2">{project.description}</p>{/if}
+        </div>
+        <div class="bg-white rounded-lg border border-outline-variant shadow-xs p-4 shrink-0 w-full md:w-auto">
+          <div class="flex items-center gap-3">
+            <div class="w-10 h-10 rounded-full bg-primary/[0.08] flex items-center justify-center">
+              <span class="text-sm font-bold text-primary">{project.progress || 0}%</span>
             </div>
-            <div class="flex flex-col"><span class="font-label-md text-primary-fixed-dim uppercase tracking-wider">Completion</span><span class="font-body-md">{project.progress >= 100 ? 'Done' : project.progress >= 50 ? 'On Track' : 'In Progress'}</span></div>
+            <div>
+              <p class="text-[11px] text-on-surface-variant">Progress</p>
+              <div class="w-24 bg-surface-container h-1.5 rounded-full overflow-hidden mt-1">
+                <div class="bg-primary h-full rounded-full" style="width: {project.progress || 0}%;"></div>
+              </div>
+            </div>
           </div>
         </div>
       </div>
@@ -349,7 +339,7 @@
       {/if}
 
       <!-- Tab Pills -->
-      <div class="flex space-x-2 border-b border-surface-variant overflow-x-auto no-scrollbar pb-2">
+      <div class="flex space-x-2 border-b border-surface-variant tab-strip pb-2">
         {#each ['Overview', 'Deliverables', 'Files', 'Tasks', 'Messages'] as tab}
           <button onclick={() => activeTab = tab} class="px-4 py-2 rounded-full font-label-md text-label-md shrink-0 focus:outline-none transition-colors {activeTab === tab ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/50'}">
             {tab}

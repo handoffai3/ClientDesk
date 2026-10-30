@@ -169,7 +169,7 @@
         </div>
       </div>
 
-      <div class="flex gap-1.5 overflow-x-auto pb-1 mb-5">
+      <div class="flex gap-1.5 tab-strip pb-1 mb-5">
         {#each [
           { key: 'all', label: 'All' },
           { key: 'paid', label: 'Paid' },

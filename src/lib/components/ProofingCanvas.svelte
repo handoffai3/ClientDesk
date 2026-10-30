@@ -105,6 +105,8 @@
     }
   }
 
+  let signedFileUrl = $state<string | null>(null);
+  let fileUrl = $derived(signedFileUrl || deliverable.file_url);
   let isPdf = $derived(deliverable.file_type === 'pdf');
   let isApproved = $derived(deliverable.status === 'approved');
 
@@ -155,6 +157,22 @@
     let channel: any;
 
     (async () => {
+      // Fetch signed URL for the deliverable file
+      try {
+        const { data: session } = await supabase.auth.getSession();
+        if (session?.session?.access_token && deliverable.file_url) {
+          const res = await fetch('/api/files/signed-url', {
+            method: 'POST',
+            headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
+            body: JSON.stringify({ file_url: deliverable.file_url })
+          });
+          if (res.ok) {
+            const json = await res.json();
+            if (json.url) signedFileUrl = json.url;
+          }
+        }
+      } catch { /* fall back to original URL */ }
+
       await loadPins();
       await loadAllReplies();
       if (isPdf) await loadPdf();
@@ -220,7 +238,7 @@
     try {
       const pdfjsLib = await import('pdfjs-dist');
       pdfjsLib.GlobalWorkerOptions.workerSrc = `https://cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.min.mjs`;
-      const loadingTask = pdfjsLib.getDocument(deliverable.file_url);
+      const loadingTask = pdfjsLib.getDocument(fileUrl);
       pdfDoc = await loadingTask.promise;
       totalPages = pdfDoc.numPages;
       await renderPdfPage(currentPage);
@@ -437,7 +455,15 @@
 
   function zoomIn() { zoom = Math.min(zoom + 0.25, 3); if (isPdf && pdfDoc) renderPdfPage(currentPage); }
   function zoomOut() { zoom = Math.max(zoom - 0.25, 0.5); if (isPdf && pdfDoc) renderPdfPage(currentPage); }
-  function zoomFit() { zoom = 1; if (isPdf && pdfDoc) renderPdfPage(currentPage); }
+  function zoomFit() {
+    if (canvasContainer && imageNaturalWidth > 0) {
+      const containerWidth = canvasContainer.clientWidth - 32;
+      zoom = Math.min(containerWidth / imageNaturalWidth, 3);
+    } else {
+      zoom = 1;
+    }
+    if (isPdf && pdfDoc) renderPdfPage(currentPage);
+  }
 
   async function reopenDeliverable() {
     const now = new Date().toISOString();
@@ -535,7 +561,7 @@
         <div class="flex items-center gap-1.5 mt-0.5 whitespace-nowrap">
           <span class="{statusBadge(deliverable.status)} px-1.5 md:px-2 py-0.5 rounded-full text-[9px] md:text-[10px] font-bold uppercase whitespace-nowrap">{statusLabel(deliverable.status)}</span>
           <span class="text-[10px] md:text-[11px] text-outline hidden md:inline">v{deliverable.version}</span>
-          <span class="text-[10px] md:text-[11px] text-outline whitespace-nowrap">{pins.length} pin{pins.length !== 1 ? 's' : ''}</span>
+          <span class="text-[10px] md:text-[11px] text-outline whitespace-nowrap hidden md:inline">{pins.length} pin{pins.length !== 1 ? 's' : ''}</span>
         </div>
       </div>
     </div>
@@ -575,8 +601,9 @@
           <span class="material-symbols-outlined text-[18px]" style={pinModeActive ? "font-variation-settings: 'FILL' 1;" : ''}>push_pin</span>
         </button>
       {/if}
-      <button onclick={() => mobileSheetOpen = !mobileSheetOpen} class="md:hidden p-1.5 rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-variant focus:outline-none" title="Feedback panel">
+      <button onclick={() => mobileSheetOpen = !mobileSheetOpen} class="md:hidden p-1.5 rounded-lg bg-surface-container text-on-surface-variant hover:bg-surface-variant focus:outline-none flex items-center gap-1" title="Feedback panel">
         <span class="material-symbols-outlined text-[18px]">chat</span>
+        {#if pins.length > 0}<span class="text-[10px] font-bold">{pins.length}</span>{/if}
       </button>
 
       <!-- Desktop actions: only client users can approve/request changes -->
@@ -609,7 +636,7 @@
   <!-- Main content -->
   <div class="flex flex-1 overflow-hidden">
     <!-- Left: Canvas -->
-    <div class="flex-1 md:flex-[7] overflow-auto bg-[#1a1a2e] flex items-center justify-center p-4 md:p-8 {userRole === 'client' && !isApproved ? 'pb-20 md:pb-8' : ''}" bind:this={canvasContainer}>
+    <div class="flex-1 md:flex-[7] overflow-auto bg-[#1a1a2e] flex items-start justify-center p-4 pt-6 md:p-8 {userRole === 'client' && !isApproved ? 'pb-20 md:pb-8' : ''}" bind:this={canvasContainer}>
       {#if pinModeActive}
         <div class="fixed top-14 left-1/2 -translate-x-1/2 z-[210] md:hidden bg-primary text-white px-4 py-2 rounded-full text-xs font-bold shadow-lg flex items-center gap-1.5 animate-fadeIn">
           <span class="material-symbols-outlined text-[14px]" style="font-variation-settings: 'FILL' 1;">push_pin</span> Pin mode on — tap the image
@@ -626,7 +653,7 @@
         {:else}
           <img
             bind:this={imageEl}
-            src={deliverable.file_url}
+            src={fileUrl}
             alt={deliverable.title}
             onload={handleImageLoad}
             class="block rounded shadow-lg max-w-none"

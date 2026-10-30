@@ -788,3 +788,15 @@ DO $$ BEGIN
   END IF;
 END $$;
 COMMIT;
+
+-- ===== Signed URL support: add file_path column and backfill from file_url =====
+ALTER TABLE files ADD COLUMN IF NOT EXISTS file_path text;
+
+UPDATE files
+  SET file_path = substring(file_url from '/ClientDeskBucket/(.+)$')
+  WHERE file_path IS NULL AND file_url IS NOT NULL;
+
+-- Make bucket private (remove public read policy)
+DROP POLICY IF EXISTS "Allow public read from ClientDeskBucket" ON storage.objects;
+
+COMMIT;
