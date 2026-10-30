@@ -142,7 +142,7 @@
 	{@render children()}
 {/if}
 
-{#if !$proofingOpen}
+{#if !$proofingOpen && !$clientStore.client_id}
 <button
 	onclick={globalReload}
 	disabled={isReloading}

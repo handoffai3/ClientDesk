@@ -41,7 +41,7 @@
   }
 
   function fmtAmt(n: number) { return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
-  function fmtDate(d: string | null) { return d ? new Date(d).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'; }
+  function fmtDate(d: string | null) { return d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'; }
   let toastMsg = $state('');
   let payingInvoiceId = $state<string | null>(null);
 
@@ -81,9 +81,9 @@
 
   <main class="flex-1 overflow-y-auto mt-14 px-6 py-6 max-w-container-max mx-auto w-full">
     {#if loading}
-      <div>
+      <div class="pt-1">
         <div class="animate-shimmer rounded-lg h-20 mb-5"></div>
-        <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
+        <div class="grid grid-cols-3 gap-3 mb-5">
           {#each Array(3) as _}
             <div class="bg-white rounded-lg p-4 border border-outline-variant">
               <div class="h-3 animate-shimmer rounded w-1/2 mb-2"></div>
@@ -93,55 +93,56 @@
         </div>
       </div>
     {:else}
-      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 animate-fadeIn">
+      <div class="flex flex-col md:flex-row md:items-center justify-between gap-4 mb-5 animate-fadeIn pt-1">
         <div>
           <h1 class="text-xl font-semibold text-on-surface mb-1">Welcome, {$clientStore.full_name}</h1>
           <p class="text-sm text-on-surface-variant">Here's an overview of your active engagements.</p>
         </div>
         {#if recentProject}
-          <div class="bg-white rounded-lg border border-outline-variant shadow-xs p-4 w-full md:w-72">
+          <a href="/client/projects/{recentProject.id}" class="bg-white rounded-lg border border-outline-variant shadow-xs p-4 w-full md:w-72 no-underline cursor-pointer hover:border-primary/30 hover:shadow-md transition-all group">
             <div class="flex justify-between items-end mb-2">
               <div>
                 <span class="text-[11px] text-on-surface-variant">Current Project</span>
-                <h3 class="text-sm font-medium text-on-surface truncate max-w-[160px]">{recentProject.name}</h3>
+                <h3 class="text-sm font-medium text-on-surface truncate max-w-[160px] group-hover:text-primary transition-colors">{recentProject.name}</h3>
               </div>
               <span class="text-sm font-semibold text-primary">{recentProject.progress}%</span>
             </div>
             <div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
               <div class="bg-primary h-full rounded-full" style="width: {recentProject.progress}%;"></div>
             </div>
-          </div>
+          </a>
         {/if}
       </div>
 
-      <div class="grid grid-cols-1 sm:grid-cols-3 gap-3 mb-5">
-        <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
-          <div class="flex items-center gap-2 mb-2">
-            <div class="w-7 h-7 rounded-lg bg-secondary/[0.08] flex items-center justify-center">
-              <span class="material-symbols-outlined text-secondary text-[16px]">folder_open</span>
+      <!-- Stat cards: compact row on mobile -->
+      <div class="grid grid-cols-3 gap-3 mb-5">
+        <a href="/client/projects" class="bg-white rounded-lg p-3 md:p-4 shadow-xs border border-outline-variant no-underline cursor-pointer hover:border-primary/30 hover:shadow-md transition-all group">
+          <div class="flex items-center gap-2 mb-1.5 md:mb-2">
+            <div class="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-secondary/[0.08] flex items-center justify-center">
+              <span class="material-symbols-outlined text-secondary text-[14px] md:text-[16px]">folder_open</span>
             </div>
-            <span class="text-xs text-on-surface-variant">Active Projects</span>
+            <span class="text-[10px] md:text-xs text-on-surface-variant leading-tight">Active Projects</span>
           </div>
-          <span class="text-[15px] font-semibold text-on-surface">{activeProjectsCount}</span>
-        </div>
-        <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
-          <div class="flex items-center gap-2 mb-2">
-            <div class="w-7 h-7 rounded-lg bg-success/[0.08] flex items-center justify-center">
-              <span class="material-symbols-outlined text-success text-[16px]">description</span>
+          <span class="text-sm md:text-[15px] font-semibold text-on-surface group-hover:text-primary transition-colors">{activeProjectsCount}</span>
+        </a>
+        <a href="/client/files" class="bg-white rounded-lg p-3 md:p-4 shadow-xs border border-outline-variant no-underline cursor-pointer hover:border-primary/30 hover:shadow-md transition-all group">
+          <div class="flex items-center gap-2 mb-1.5 md:mb-2">
+            <div class="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-success/[0.08] flex items-center justify-center">
+              <span class="material-symbols-outlined text-success text-[14px] md:text-[16px]">description</span>
             </div>
-            <span class="text-xs text-on-surface-variant">Files Uploaded</span>
+            <span class="text-[10px] md:text-xs text-on-surface-variant leading-tight">Files Uploaded</span>
           </div>
-          <span class="text-[15px] font-semibold text-on-surface">{filesCount}</span>
-        </div>
-        <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
-          <div class="flex items-center gap-2 mb-2">
-            <div class="w-7 h-7 rounded-lg bg-tertiary/[0.08] flex items-center justify-center">
-              <span class="material-symbols-outlined text-tertiary text-[16px]">receipt_long</span>
+          <span class="text-sm md:text-[15px] font-semibold text-on-surface group-hover:text-primary transition-colors">{filesCount}</span>
+        </a>
+        <a href="/client/invoices" class="bg-white rounded-lg p-3 md:p-4 shadow-xs border border-outline-variant no-underline cursor-pointer hover:border-primary/30 hover:shadow-md transition-all group">
+          <div class="flex items-center gap-2 mb-1.5 md:mb-2">
+            <div class="w-6 h-6 md:w-7 md:h-7 rounded-lg bg-tertiary/[0.08] flex items-center justify-center">
+              <span class="material-symbols-outlined text-tertiary text-[14px] md:text-[16px]">receipt_long</span>
             </div>
-            <span class="text-xs text-on-surface-variant">Pending Invoices</span>
+            <span class="text-[10px] md:text-xs text-on-surface-variant leading-tight">Pending Invoices</span>
           </div>
-          <span class="text-[15px] font-semibold text-on-surface">{pendingInvoicesCount}</span>
-        </div>
+          <span class="text-sm md:text-[15px] font-semibold text-on-surface group-hover:text-primary transition-colors">{pendingInvoicesCount}</span>
+        </a>
       </div>
 
       <div class="grid grid-cols-1 lg:grid-cols-3 gap-5 mb-8">
@@ -149,7 +150,7 @@
           <h2 class="text-sm font-medium text-on-surface mb-3">My Projects</h2>
           <div class="space-y-3">
             {#each activeProjects as project}
-              <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant hover:border-primary/30 transition-colors">
+              <a href="/client/projects/{project.id}" class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant hover:border-primary/30 hover:shadow-md transition-all no-underline block cursor-pointer group">
                 <div class="flex justify-between items-start mb-2">
                   <span class="text-[11px] font-medium px-1.5 py-0.5 rounded {project.progress > 0 ? 'bg-secondary/[0.08] text-secondary' : 'bg-surface-container text-on-surface-variant'}">
                     {project.progress > 0 ? 'In Progress' : 'Planning'}
@@ -158,13 +159,13 @@
                     <span class="text-xs text-on-surface-variant flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">event</span> {fmtDate(project.deadline)}</span>
                   {/if}
                 </div>
-                <h3 class="text-sm font-medium text-on-surface mb-1">{project.name}</h3>
+                <h3 class="text-sm font-medium text-on-surface mb-1 group-hover:text-primary transition-colors">{project.name}</h3>
                 <p class="text-[13px] text-on-surface-variant mb-3 line-clamp-2">{project.description || 'No description provided.'}</p>
                 <div class="w-full bg-surface-container h-1.5 rounded-full overflow-hidden">
                   <div class="bg-primary h-full rounded-full" style="width: {project.progress}%;"></div>
                 </div>
                 <div class="text-right mt-1 text-xs font-medium text-primary">{project.progress}%</div>
-              </div>
+              </a>
             {/each}
             {#if activeProjects.length === 0}
               <div class="py-10 text-center border border-dashed border-outline-variant rounded-lg">

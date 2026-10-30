@@ -177,7 +177,7 @@
           { key: 'overdue', label: 'Overdue' }
         ] as filter}
           <button
-            class="px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors {activeFilter === filter.key ? 'bg-primary text-white' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
+            class="px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors {activeFilter === filter.key ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
             onclick={() => activeFilter = filter.key}
           >
             {filter.label}
@@ -188,7 +188,7 @@
       <!-- Invoices Grid -->
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
         {#each filteredInvoices as inv (inv.id)}
-          <div class="bg-surface rounded-2xl p-6 shadow-sm border border-outline-variant/30 hover:border-primary/40 hover:shadow-md transition-all duration-200 flex flex-col">
+          <div class="bg-surface rounded-2xl p-6 shadow-sm border border-outline-variant/30 hover:border-primary/40 hover:shadow-md transition-all duration-200 flex flex-col cursor-pointer" onclick={() => openInvoiceModal(inv)} role="button" tabindex="0" onkeydown={(e) => { if (e.key === 'Enter' || e.key === ' ') { e.preventDefault(); openInvoiceModal(inv); } }}>
             <div class="flex justify-between items-start mb-4">
               <span class="font-label-md text-xs font-bold text-outline uppercase tracking-wider">{inv.invoice_number}</span>
               

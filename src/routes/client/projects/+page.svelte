@@ -73,7 +73,7 @@
           { key: 'on_hold', label: 'On Hold' }
         ] as filter}
           <button
-            class="px-5 py-2.5 rounded-full font-label-md text-label-md whitespace-nowrap transition-all duration-150 focus:outline-none {activeFilter === filter.key ? 'bg-primary text-white shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/30'}"
+            class="px-5 py-2.5 rounded-full font-label-md text-label-md whitespace-nowrap transition-all duration-150 focus:outline-none {activeFilter === filter.key ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/30'}"
             onclick={() => activeFilter = filter.key}
           >
             {filter.label}
@@ -85,7 +85,7 @@
       <div class="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6 mb-12">
         {#each filteredProjects as project (project.id)}
           {@const badge = statusBadge(project.status)}
-          <div class="bg-surface rounded-2xl shadow-sm border border-outline-variant/20 overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-t-4 {borderColor(project.status)}">
+          <a href="/client/projects/{project.id}" class="bg-surface rounded-2xl shadow-sm border border-outline-variant/20 overflow-hidden hover:shadow-md hover:-translate-y-0.5 transition-all duration-200 border-t-4 {borderColor(project.status)} no-underline block cursor-pointer group">
             <div class="p-6">
               <div class="flex justify-between items-start mb-4">
                 <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider {badge.cls}">
@@ -99,11 +99,10 @@
                 {/if}
               </div>
 
-              <h3 class="font-title-md text-title-md font-bold text-on-surface mb-2">{project.name}</h3>
+              <h3 class="font-title-md text-title-md font-bold text-on-surface mb-2 group-hover:text-primary transition-colors">{project.name}</h3>
               <p class="text-sm text-on-surface-variant mb-5 line-clamp-2">{project.description || 'No description provided.'}</p>
 
-              <!-- Progress Bar -->
-              <div class="mb-4">
+              <div class="mb-1">
                 <div class="flex justify-between items-center mb-1.5">
                   <span class="text-xs text-on-surface-variant font-medium">Progress</span>
                   <span class="text-xs font-bold text-primary">{project.progress || 0}%</span>
@@ -112,12 +111,8 @@
                   <div class="bg-primary h-full rounded-full transition-all duration-500" style="width: {project.progress || 0}%;"></div>
                 </div>
               </div>
-
-              <a href="/client/projects/{project.id}" class="w-full bg-primary hover:bg-primary/90 text-white font-label-md text-label-md py-2.5 rounded-lg shadow-sm transition-colors focus:outline-none flex items-center justify-center gap-2">
-                <span class="material-symbols-outlined text-[18px]">open_in_new</span> Open
-              </a>
             </div>
-          </div>
+          </a>
         {/each}
 
         {#if filteredProjects.length === 0}
