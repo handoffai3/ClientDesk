@@ -9,6 +9,7 @@
 
   import { agencyDataStore } from '../../stores/agencyData';
   import AgencyHeader from '$lib/components/AgencyHeader.svelte';
+  import { fmtMoney } from '$lib/format';
 
   let selectedClientId = $state<string | null>(null);
   let clientFilterId = $derived($page.url.searchParams.get('client'));
@@ -77,7 +78,7 @@
   });
 
   function initials(name: string) { return name?.substring(0, 2).toUpperCase() || 'NA'; }
-  function fmt(n: number) { return '₹' + n.toLocaleString('en-IN'); }
+  function fmt(n: number) { return fmtMoney(n, $agencyDataStore.currency, 0); }
 
   function formatTime(dateStr: string) {
     const d = new Date(dateStr);

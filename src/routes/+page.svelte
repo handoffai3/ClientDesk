@@ -8,6 +8,7 @@
   import InvoiceCard, { type InvoiceProps } from '$lib/components/InvoiceCard.svelte';
   import Messages from '$lib/components/Messages.svelte';
   import Settings from '$lib/components/Settings.svelte';
+  import { fmtMoney } from '$lib/format';
   import { supabase } from '$lib/supabaseClient';
   import { onMount } from 'svelte';
   import { authState } from '$lib/auth.svelte';
@@ -179,7 +180,7 @@
   }
 
   function fmtINR(n: number) {
-    return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 });
+    return fmtMoney(n, $agencyDataStore.currency, 0);
   }
 
   async function handleSignOut() {
@@ -233,7 +234,7 @@
     clientAvatar: i.clients?.avatar_url,
     clientInitials: i.clients?.full_name ? i.clients.full_name.substring(0, 2).toUpperCase() : 'NA',
     theme: (i.status === 'paid' ? 'secondary' : i.status === 'overdue' ? 'primary' : 'tertiary') as 'primary' | 'secondary' | 'tertiary',
-    amount: `$${i.total.toLocaleString()}`
+    amount: fmtMoney(Number(i.total || 0), $agencyDataStore.currency, 0)
   })));
 
   let filesData = $derived($agencyDataStore.files.map(f => ({

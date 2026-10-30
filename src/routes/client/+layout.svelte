@@ -20,7 +20,7 @@
       supabase.from('invoices').select('*, invoice_items(*)').eq('client_id', clientId).order('created_at', { ascending: false }),
       supabase.from('messages').select('*').eq('client_id', clientId).order('created_at', { ascending: true }),
       supabase.from('files').select('*'), // we'll filter this down below using project IDs
-      supabase.from('agencies').select('logo_url, name').eq('id', agencyId).single()
+      supabase.from('agencies').select('logo_url, name, currency, tax_label, default_tax_rate').eq('id', agencyId).single()
     ]);
 
     const agencyData = agencyRes.data;
@@ -36,6 +36,9 @@
     clientDataStore.set({
       agencyName: agencyData?.name || 'ClientDesk',
       agencyLogo: agencyData?.logo_url || '',
+      currency: agencyData?.currency || 'USD',
+      taxLabel: agencyData?.tax_label || 'Tax',
+      defaultTaxRate: Number(agencyData?.default_tax_rate || 0),
       projects,
       invoices: invoicesRes.data || [],
       messages: messagesRes.data || [],

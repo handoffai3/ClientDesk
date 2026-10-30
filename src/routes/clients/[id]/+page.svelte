@@ -6,6 +6,7 @@
   import { agencyDataStore } from '../../../stores/agencyData';
   import AgencyHeader from '$lib/components/AgencyHeader.svelte';
   import { onMount } from 'svelte';
+  import { fmtMoney } from '$lib/format';
 
   const clientId = $page.params.id;
 
@@ -60,7 +61,7 @@
     toastMsg = msg; toastType = type; setTimeout(() => toastMsg = '', 3000);
   }
 
-  function fmt(n: number) { return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  function fmt(n: number) { return fmtMoney(n, $agencyDataStore.currency, 0); }
   function initials(name: string) { return name?.substring(0, 2).toUpperCase() || 'NA'; }
   function fmtDate(d: string | null) { return d ? new Date(d).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'; }
   function fmtTime(d: string) { return new Date(d).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }

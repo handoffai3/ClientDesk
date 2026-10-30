@@ -4,6 +4,7 @@
   import { goto } from '$app/navigation';
   import { agencyDataStore } from '../../../stores/agencyData';
   import AgencyHeader from '$lib/components/AgencyHeader.svelte';
+  import { fmtMoney } from '$lib/format';
 
   let saving = $state(false);
   let errorMsg = $state('');
@@ -19,7 +20,7 @@
   let issueDate = $state(new Date().toISOString().split('T')[0]);
   let dueDate = $state('');
   let notes = $state('');
-  let applyGst = $state(true);
+  let applyGst = $state($agencyDataStore.defaultTaxRate > 0);
 
   interface LineItem { id: number; description: string; qty: number; rate: number; }
   let lineItems = $state<LineItem[]>([
@@ -27,11 +28,12 @@
   ]);
 
   let subtotal = $derived(lineItems.reduce((s, i) => s + (i.qty * i.rate), 0));
-  let gstAmount = $derived(applyGst ? subtotal * 0.18 : 0);
+  let taxRate = $derived($agencyDataStore.defaultTaxRate);
+  let gstAmount = $derived(applyGst ? subtotal * (taxRate / 100) : 0);
   let total = $derived(subtotal + gstAmount);
 
   function fmt(n: number) {
-    return new Intl.NumberFormat('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 }).format(n);
+    return fmtMoney(n, $agencyDataStore.currency);
   }
 
   function addItem() {
@@ -84,7 +86,7 @@
         invoice_number: invoiceNumber,
         status,
         subtotal,
-        gst_rate: applyGst ? 18 : 0,
+        gst_rate: applyGst ? taxRate : 0,
         gst_amount: gstAmount,
         total,
         issue_date: issueDate || null,
@@ -233,7 +235,7 @@
               <div class="col-span-2">
                 <input class="form-input w-full p-2 font-body-md text-body-md text-right" type="number" value={item.rate} oninput={(e) => updateItem(item.id, 'rate', Number(e.currentTarget.value))} placeholder="0" disabled={saving} />
               </div>
-              <div class="col-span-2 text-right font-body-md text-body-md px-2">₹{fmt(item.qty * item.rate)}</div>
+              <div class="col-span-2 text-right font-body-md text-body-md px-2">{fmt(item.qty * item.rate)}</div>
               <div class="col-span-1 text-center">
                 <button onclick={() => removeItem(item.id)} class="text-on-surface-variant hover:text-error focus:outline-none" disabled={saving}>
                   <span class="material-symbols-outlined text-sm">close</span>
@@ -246,20 +248,20 @@
         <!-- Totals -->
         <div class="border-t border-outline-variant pt-5 flex flex-col md:flex-row justify-between items-end gap-5">
           <div class="w-full md:w-auto flex items-center gap-3 bg-surface-container-low p-3 rounded-lg border border-outline-variant">
-            <span class="text-sm text-on-surface">Apply GST (18%)</span>
+            <span class="text-sm text-on-surface">Apply {$agencyDataStore.taxLabel} ({taxRate}%)</span>
             <input type="checkbox" bind:checked={applyGst} class="accent-primary w-5 h-5" />
           </div>
           <div class="w-full md:w-56 flex flex-col gap-1.5">
             <div class="flex justify-between text-sm text-on-surface-variant">
-              <span>Subtotal</span><span>₹{fmt(subtotal)}</span>
+              <span>Subtotal</span><span>{fmt(subtotal)}</span>
             </div>
             {#if applyGst}
               <div class="flex justify-between text-sm text-on-surface-variant">
-                <span>GST (18%)</span><span>₹{fmt(gstAmount)}</span>
+                <span>{$agencyDataStore.taxLabel} ({taxRate}%)</span><span>{fmt(gstAmount)}</span>
               </div>
             {/if}
             <div class="flex justify-between text-[15px] text-on-surface pt-2 border-t border-outline-variant font-semibold">
-              <span>Total</span><span>₹{fmt(total)}</span>
+              <span>Total</span><span>{fmt(total)}</span>
             </div>
           </div>
         </div>
@@ -353,12 +355,12 @@
 
           <div class="flex justify-end">
             <div class="w-48 text-[13px]">
-              <div class="flex justify-between py-1 text-on-surface-variant"><span>Subtotal</span><span>₹{fmt(subtotal)}</span></div>
+              <div class="flex justify-between py-1 text-on-surface-variant"><span>Subtotal</span><span>{fmt(subtotal)}</span></div>
               {#if applyGst}
-                <div class="flex justify-between py-1 text-on-surface-variant"><span>GST (18%)</span><span>₹{fmt(gstAmount)}</span></div>
+                <div class="flex justify-between py-1 text-on-surface-variant"><span>{$agencyDataStore.taxLabel} ({taxRate}%)</span><span>{fmt(gstAmount)}</span></div>
               {/if}
               <div class="flex justify-between py-2 mt-1.5 border-t border-outline-variant text-sm text-primary font-semibold">
-                <span>Total INR</span><span>₹{fmt(total)}</span>
+                <span>Total</span><span>{fmt(total)}</span>
               </div>
             </div>
           </div>

@@ -7,7 +7,9 @@
 
   const navTabs = ['Dashboard', 'Projects', 'Clients', 'Files', 'Invoices', 'Messages'];
   
-  let activeTab = $state<'Branding' | 'Account' | 'Notifications' | 'Team' | 'Payments' | 'Email'>('Branding');
+  import { agencyDataStore } from '../../stores/agencyData';
+
+  let activeTab = $state<'Branding' | 'Account' | 'Billing' | 'Notifications' | 'Team' | 'Payments' | 'Email'>('Branding');
   let userMenuOpen = $state(false);
   let loading = $state(true);
 
@@ -32,6 +34,13 @@
   let inviteError = $state('');
   let inviteSuccess = $state('');
 
+  // Billing
+  let billingCurrency = $state('USD');
+  let billingTaxLabel = $state('Tax');
+  let billingTaxRate = $state(0);
+  let savingBilling = $state(false);
+  let billingMsg = $state('');
+
   // UI state
   let savingBranding = $state(false);
   let savingNotifications = $state(false);
@@ -55,6 +64,9 @@
       logoUrl = agency.logo_url || '';
       primaryColor = agency.primary_color || '#7C3AED';
       customDomain = agency.custom_domain || '';
+      billingCurrency = agency.currency || 'USD';
+      billingTaxLabel = agency.tax_label || 'Tax';
+      billingTaxRate = Number(agency.default_tax_rate || 0);
       if (agency.notification_settings) {
         notificationSettings = { ...notificationSettings, ...agency.notification_settings };
       }
@@ -229,6 +241,26 @@
     { name: 'Red', hex: '#EF4444' }
   ];
 
+  const currencies = ['USD', 'EUR', 'GBP', 'INR', 'AUD', 'CAD'];
+
+  async function saveBilling() {
+    if (!agencyId) return;
+    savingBilling = true;
+    billingMsg = '';
+    const { error } = await supabase
+      .from('agencies')
+      .update({ currency: billingCurrency, tax_label: billingTaxLabel, default_tax_rate: billingTaxRate })
+      .eq('id', agencyId);
+    if (error) {
+      billingMsg = 'Error: ' + error.message;
+    } else {
+      billingMsg = 'Billing settings saved!';
+      agencyDataStore.update(s => ({ ...s, currency: billingCurrency, taxLabel: billingTaxLabel, defaultTaxRate: billingTaxRate }));
+      setTimeout(() => billingMsg = '', 3000);
+    }
+    savingBilling = false;
+  }
+
   const notifs = [
     { key: 'newFile', label: 'New file upload', desc: 'When a client uploads a file.' },
     { key: 'invoicePaid', label: 'Invoice paid', desc: 'When a client completes payment.' },
@@ -255,7 +287,7 @@
 
     <!-- Tab Pills -->
     <div class="flex space-x-2 tab-strip pb-2 mb-8">
-      {#each ['Branding', 'Account', 'Notifications', 'Team', 'Payments', 'Email'] as tab}
+      {#each ['Branding', 'Account', 'Billing', 'Notifications', 'Team', 'Payments', 'Email'] as tab}
         <button
           class="px-5 py-2.5 rounded-full font-label-md text-label-md whitespace-nowrap transition-all duration-150 focus:outline-none {activeTab === tab ? 'bg-primary text-white shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/30'}"
           onclick={() => activeTab = tab as any}
@@ -468,6 +500,41 @@
             </div>
           </div>
         </div>
+      {:else if activeTab === 'Billing'}
+        <div class="max-w-xl bg-surface rounded-2xl p-8 shadow-sm border border-outline-variant/20">
+          <h2 class="font-headline-sm text-headline-sm text-on-surface mb-2">Currency & Tax</h2>
+          <p class="font-body-md text-body-md text-on-surface-variant mb-6">Set the default currency and tax settings for new invoices.</p>
+
+          <div class="space-y-5">
+            <div>
+              <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="bill-currency">Currency</label>
+              <select id="bill-currency" bind:value={billingCurrency} class="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg focus:outline-none focus:border-primary text-sm text-on-surface">
+                {#each currencies as c}
+                  <option value={c}>{c}</option>
+                {/each}
+              </select>
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="bill-tax-label">Tax Label</label>
+              <input id="bill-tax-label" bind:value={billingTaxLabel} placeholder="e.g. GST, VAT, Sales Tax" class="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg focus:outline-none focus:border-primary text-sm text-on-surface" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="bill-tax-rate">Default Tax Rate (%)</label>
+              <input id="bill-tax-rate" type="number" min="0" max="100" step="0.01" bind:value={billingTaxRate} class="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg focus:outline-none focus:border-primary text-sm text-on-surface" />
+            </div>
+          </div>
+
+          <div class="pt-5 border-t border-outline-variant/30 mt-6 flex items-center justify-between">
+            <span class="text-sm {billingMsg.includes('Error') ? 'text-error' : 'text-[#10b981]'}">{billingMsg}</span>
+            <button class="bg-primary hover:bg-primary/90 text-on-primary px-6 py-2 rounded-lg font-label-md text-label-md shadow-md transition-colors focus:outline-none flex items-center gap-2" onclick={saveBilling} disabled={savingBilling}>
+              {#if savingBilling}
+                <svg class="animate-spin h-4 w-4" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
+              {/if}
+              Save Changes
+            </button>
+          </div>
+        </div>
+
       {:else if activeTab === 'Payments' || activeTab === 'Email'}
         <SettingsPanels initialTab={activeTab} hideTabs />
       {/if}

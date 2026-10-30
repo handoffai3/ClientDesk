@@ -10,6 +10,7 @@
   import { agencyDataStore } from '../../stores/agencyData';
   import AgencyHeader from '$lib/components/AgencyHeader.svelte';
   import { sendBrandedEmail } from '$lib/emailTemplates';
+  import { fmtMoney } from '$lib/format';
 
   let activeFilter = $state<'All' | 'Draft' | 'Sent' | 'Paid' | 'Pending' | 'Overdue'>('All');
   let userMenuOpen = $state(false);
@@ -57,7 +58,7 @@
   let overdueTotal = $derived(invoices.filter(i => i.status === 'overdue').reduce((s, i) => s + Number(i.total || 0), 0));
 
   function fmt(n: number) {
-    return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return fmtMoney(n, $agencyDataStore.currency);
   }
 
   function statusDisplay(s: string) {
@@ -151,7 +152,7 @@
     doc.text('Subtotal:', 130, y);
     doc.text(fmt(Number(inv.subtotal || 0)), 160, y);
     y += 7;
-    doc.text(`GST (${inv.gst_rate || 18}%):`, 130, y);
+    doc.text(`${$agencyDataStore.taxLabel} (${inv.gst_rate || 0}%):`, 130, y);
     doc.text(fmt(Number(inv.gst_amount || 0)), 160, y);
     y += 7;
     doc.setFont('helvetica', 'bold');

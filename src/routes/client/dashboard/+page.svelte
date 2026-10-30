@@ -5,6 +5,7 @@
   import { clientStore } from '$lib/clientStore';
 
   import { clientDataStore } from '../../../stores/clientData';
+  import { fmtMoney } from '$lib/format';
 
   let activeProjects = $derived($clientDataStore.projects.filter(p => p.status === 'active'));
   let recentProject = $derived(activeProjects.length > 0 ? activeProjects[0] : null);
@@ -40,7 +41,7 @@
     return `${(bytes / (1024 * 1024)).toFixed(1)} MB`;
   }
 
-  function fmtAmt(n: number) { return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 0, maximumFractionDigits: 0 }); }
+  function fmtAmt(n: number) { return fmtMoney(n, $clientDataStore.currency, 0); }
   function fmtDate(d: string | null) { return d ? new Date(d).toLocaleDateString('en-IN', { day: 'numeric', month: 'short', year: 'numeric' }) : 'N/A'; }
   let toastMsg = $state('');
   let payingInvoiceId = $state<string | null>(null);

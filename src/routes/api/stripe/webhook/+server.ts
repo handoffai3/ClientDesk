@@ -48,7 +48,7 @@ export const POST: RequestHandler = async ({ request }) => {
       // Notify agency user
       const { data: invoice } = await supabaseAdmin
         .from('invoices')
-        .select('invoice_number, agency_id, client_id, total, clients(full_name)')
+        .select('invoice_number, agency_id, client_id, total, clients(full_name), agencies(currency)')
         .eq('id', invoiceId)
         .single();
 
@@ -60,13 +60,14 @@ export const POST: RequestHandler = async ({ request }) => {
           .limit(5);
 
         const clientName = (invoice.clients as any)?.full_name || 'A client';
-        const amount = Number(invoice.total || 0).toLocaleString('en-IN');
+        const cur = ((invoice.agencies as any)?.currency || 'USD') as string;
+        const amount = new Intl.NumberFormat('en-US', { style: 'currency', currency: cur }).format(Number(invoice.total || 0));
 
         for (const user of agencyUsers || []) {
           await supabaseAdmin.from('notifications').insert({
             user_id: user.id,
             title: `Invoice ${invoice.invoice_number} paid`,
-            body: `${clientName} paid ₹${amount}`,
+            body: `${clientName} paid ${amount}`,
             type: 'invoice',
           });
         }

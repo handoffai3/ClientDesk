@@ -16,7 +16,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
   const { data: invoice, error: invErr } = await supabaseAdmin
     .from('invoices')
-    .select('*, clients(full_name, email), agencies(name, stripe_account_id)')
+    .select('*, clients(full_name, email), agencies(name, stripe_account_id, currency)')
     .eq('id', invoice_id)
     .single();
 
@@ -38,7 +38,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
 
   const lineItems: any[] = (items || []).map((item: any) => ({
     price_data: {
-      currency: 'inr',
+      currency: (invoice.agencies?.currency || 'USD').toLowerCase(),
       product_data: { name: item.description || 'Service' },
       unit_amount: Math.round(Number(item.rate || 0) * 100),
     },
@@ -48,8 +48,8 @@ export const POST: RequestHandler = async ({ request, url }) => {
   if (Number(invoice.gst_amount) > 0) {
     lineItems.push({
       price_data: {
-        currency: 'inr',
-        product_data: { name: `GST (${invoice.gst_rate || 18}%)` },
+        currency: (invoice.agencies?.currency || 'USD').toLowerCase(),
+        product_data: { name: `Tax (${invoice.gst_rate || 0}%)` },
         unit_amount: Math.round(Number(invoice.gst_amount) * 100),
       },
       quantity: 1,
@@ -59,7 +59,7 @@ export const POST: RequestHandler = async ({ request, url }) => {
   if (lineItems.length === 0) {
     lineItems.push({
       price_data: {
-        currency: 'inr',
+        currency: (invoice.agencies?.currency || 'USD').toLowerCase(),
         product_data: { name: `Invoice ${invoice.invoice_number}` },
         unit_amount: Math.round(Number(invoice.total || 0) * 100),
       },

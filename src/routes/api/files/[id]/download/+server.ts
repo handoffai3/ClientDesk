@@ -35,8 +35,8 @@ export const GET: RequestHandler = async ({ params, request }) => {
 
   const { data: clientUser } = await supabaseAdmin
     .from('client_users')
-    .select('client_id, agency_id')
-    .eq('user_id', user.id)
+    .select('client_id')
+    .eq('id', user.id)
     .single();
 
   const isAgencyOwner = agencyUser && agencyUser.agency_id === file.agency_id;

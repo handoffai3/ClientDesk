@@ -9,6 +9,7 @@
   import { onMount } from 'svelte';
 
   import { clientDataStore } from '../../../stores/clientData';
+  import { fmtMoney } from '$lib/format';
 
   let activeFilter = $state('all');
   let selectedInvoice = $state<any>(null);
@@ -49,7 +50,7 @@
   let paidTotal = $derived(invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total || 0), 0));
 
   function fmt(n: number) {
-    return '₹' + n.toLocaleString('en-IN', { minimumFractionDigits: 2, maximumFractionDigits: 2 });
+    return fmtMoney(n, $clientDataStore.currency);
   }
 
   function fmtDate(d: string | null) {
@@ -221,7 +222,7 @@
               
               <div class="flex flex-col gap-1 mt-3 text-xs text-outline">
                 <div class="flex justify-between"><span>Subtotal:</span> <span class="font-medium">{fmt(Number(inv.subtotal || 0))}</span></div>
-                <div class="flex justify-between"><span>GST ({inv.gst_rate || 18}%):</span> <span class="font-medium">{fmt(Number(inv.gst_amount || 0))}</span></div>
+                <div class="flex justify-between"><span>{$clientDataStore.taxLabel} ({inv.gst_rate || 0}%):</span> <span class="font-medium">{fmt(Number(inv.gst_amount || 0))}</span></div>
                 <div class="w-full h-px bg-outline-variant/30 my-1"></div>
                 <div class="flex justify-between font-bold text-on-surface-variant"><span>Total:</span> <span>{fmt(Number(inv.total || 0))}</span></div>
               </div>
@@ -359,7 +360,7 @@
               <span class="font-medium text-on-surface">{fmt(Number(selectedInvoice.subtotal || 0))}</span>
             </div>
             <div class="flex justify-between text-sm text-on-surface-variant">
-              <span>GST ({selectedInvoice.gst_rate || 18}%)</span>
+              <span>{$clientDataStore.taxLabel} ({selectedInvoice.gst_rate || 0}%)</span>
               <span class="font-medium text-on-surface">{fmt(Number(selectedInvoice.gst_amount || 0))}</span>
             </div>
             <div class="w-full h-px bg-outline-variant/50"></div>
@@ -446,7 +447,7 @@
           <span>{fmt(Number(selectedInvoice.subtotal || 0))}</span>
         </div>
         <div style="display: flex; justify-content: space-between; padding: 8px 0; color: #666;">
-          <span>GST ({selectedInvoice.gst_rate || 18}%)</span>
+          <span>{$clientDataStore.taxLabel} ({selectedInvoice.gst_rate || 0}%)</span>
           <span>{fmt(Number(selectedInvoice.gst_amount || 0))}</span>
         </div>
         <div style="display: flex; justify-content: space-between; padding: 16px 0; border-top: 2px solid #ddd; margin-top: 8px; font-size: 20px; font-weight: bold;">

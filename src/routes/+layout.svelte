@@ -55,12 +55,13 @@
 	});
 
 	async function fetchAgencyData(agencyId: string) {
-		const [clientsRes, projectsRes, invoicesRes, tasksRes, messagesRes] = await Promise.all([
+		const [clientsRes, projectsRes, invoicesRes, tasksRes, messagesRes, agencyRes] = await Promise.all([
 			supabase.from('clients').select('*').eq('agency_id', agencyId).order('created_at', { ascending: false }),
 			supabase.from('projects').select('*, clients(full_name, avatar_url, company)').eq('agency_id', agencyId).order('created_at', { ascending: false }),
 			supabase.from('invoices').select('*, clients(full_name, avatar_url, email, company)').eq('agency_id', agencyId).order('created_at', { ascending: false }),
 			supabase.from('tasks').select('*').eq('agency_id', agencyId).order('created_at', { ascending: false }),
-			supabase.from('messages').select('id, client_id, content, file_name, sender_type, is_read, created_at, clients(full_name, avatar_url, company)').eq('agency_id', agencyId).order('created_at', { ascending: true })
+			supabase.from('messages').select('id, client_id, content, file_name, sender_type, is_read, created_at, clients(full_name, avatar_url, company)').eq('agency_id', agencyId).order('created_at', { ascending: true }),
+			supabase.from('agencies').select('currency, tax_label, default_tax_rate').eq('id', agencyId).single()
 		]);
 
 		const fetchErr = [clientsRes, projectsRes, invoicesRes, tasksRes, messagesRes].find(r => r.error);
@@ -86,6 +87,7 @@
 		}
 		allFiles.sort((a, b) => new Date(b.created_at).getTime() - new Date(a.created_at).getTime());
 
+		const ag = agencyRes.data;
 		agencyDataStore.set({
 			clients: clientsRes.data || [],
 			projects,
@@ -93,6 +95,9 @@
 			tasks: tasksRes.data || [],
 			messages: messagesRes.data || [],
 			files: allFiles,
+			currency: ag?.currency || 'USD',
+			taxLabel: ag?.tax_label || 'Tax',
+			defaultTaxRate: Number(ag?.default_tax_rate || 0),
 			loaded: true
 		});
 	}
