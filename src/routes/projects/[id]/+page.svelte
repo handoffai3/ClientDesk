@@ -183,7 +183,10 @@
       .select('*')
       .eq('project_id', projectId)
       .order('created_at', { ascending: false });
-    if (dels) deliverables = dels;
+    if (dels) {
+      deliverables = dels;
+      resolveDeliverableThumbs(dels);
+    }
 
     const [flRes, tkRes, msgRes, invRes] = await Promise.all([
       supabase.from('files').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
@@ -259,6 +262,38 @@
     return `${(bytes / 1024 / 1024).toFixed(1)} MB`;
   }
 
+  let signedThumbUrls = $state<Record<string, string>>({});
+
+  async function resolveDeliverableThumbs(dels: any[]) {
+    const { data: session } = await supabase.auth.getSession();
+    const token = session?.session?.access_token;
+    if (!token) return;
+    for (const del of dels) {
+      const url = del.thumbnail_url || del.file_url;
+      if (!url || del.file_type !== 'image') continue;
+      try {
+        const res = await fetch('/api/files/signed-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ file_url: url })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) signedThumbUrls = { ...signedThumbUrls, [del.id]: data.url };
+        }
+      } catch {}
+    }
+  }
+
+  async function downloadFile(file: any) {
+    try {
+      const res = await apiFetch(`/api/files/${file.id}/download`);
+      const data = await res.json();
+      if (res.ok && data.url) window.open(data.url, '_blank');
+      else showToast(data.message || 'Download failed', 'error');
+    } catch { showToast('Download failed.', 'error'); }
+  }
+
   function fileIcon(name: string) {
     const ext = name?.split('.').pop()?.toLowerCase() || '';
     if (ext === 'pdf') return { icon: 'picture_as_pdf', bg: 'bg-red-50', text: 'text-red-500' };
@@ -282,6 +317,7 @@
       client_id: project.client_id,
       file_name: uploadFileObj.name,
       file_url: urlData?.publicUrl || '',
+      file_path: path,
       file_size: uploadFileObj.size,
       file_type: uploadFileObj.type,
       folder: uploadFolder,
@@ -991,8 +1027,8 @@
                 <div class="bg-surface rounded-xl overflow-hidden shadow-sm border border-outline-variant/30 hover:shadow-md hover:border-primary/30 transition-all group cursor-pointer" onclick={() => openProofing(del)}>
                   <!-- Thumbnail -->
                   <div class="h-40 bg-surface-container-high relative overflow-hidden">
-                    {#if del.file_type === 'image' && del.file_url}
-                      <img src={del.thumbnail_url || del.file_url} alt={del.title} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    {#if del.file_type === 'image' && (signedThumbUrls[del.id] || del.file_url)}
+                      <img src={signedThumbUrls[del.id] || ''} alt={del.title} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     {:else}
                       <div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100">
                         <span class="material-symbols-outlined text-5xl text-red-400">picture_as_pdf</span>
@@ -1079,9 +1115,9 @@
                   </div>
                   <div class="mt-auto pt-3 border-t border-outline-variant flex items-center justify-between">
                     <button onclick={() => deleteProjectFile(f)} class="text-on-surface-variant hover:text-error text-xs flex items-center gap-1 transition-colors"><span class="material-symbols-outlined text-[14px]">delete</span> Delete</button>
-                    <a href={f.file_url} target="_blank" rel="noopener noreferrer" download class="px-2.5 py-1 border border-outline-variant text-on-surface-variant rounded-lg text-xs font-medium hover:border-primary hover:text-primary transition-colors flex items-center gap-1 no-underline">
+                    <button onclick={() => downloadFile(f)} class="px-2.5 py-1 border border-outline-variant text-on-surface-variant rounded-lg text-xs font-medium hover:border-primary hover:text-primary transition-colors flex items-center gap-1">
                       <span class="material-symbols-outlined text-[14px]">download</span> Download
-                    </a>
+                    </button>
                   </div>
                 </div>
               {/each}

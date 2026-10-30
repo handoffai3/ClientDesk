@@ -1,5 +1,6 @@
 <script lang="ts">
   import { supabase } from '$lib/supabaseClient';
+  import { apiFetch } from '$lib/apiFetch';
   import { authState } from '$lib/auth.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
@@ -61,6 +62,14 @@
   let filteredFiles = $derived(
     activeFolder ? files.filter(f => f.folder === activeFolder) : files
   );
+
+  async function downloadFile(file: any) {
+    try {
+      const res = await apiFetch(`/api/files/${file.id}/download`);
+      const data = await res.json();
+      if (res.ok && data.url) window.open(data.url, '_blank');
+    } catch {}
+  }
 
   function folderCount(folder: string) {
     return files.filter(f => f.folder === folder).length;
@@ -276,9 +285,9 @@
               <span class="text-xs text-on-surface-variant flex items-center gap-1">
                 <span class="material-symbols-outlined text-[14px]">person</span> {f.folder === 'client_uploads' ? 'Client' : 'Agency'}
               </span>
-              <a href={f.file_url} target="_blank" rel="noopener noreferrer" class="px-2.5 py-1 border border-outline-variant text-on-surface-variant rounded-lg text-xs font-medium hover:border-primary hover:text-primary transition-colors flex items-center gap-1 no-underline">
+              <button onclick={() => downloadFile(f)} class="px-2.5 py-1 border border-outline-variant text-on-surface-variant rounded-lg text-xs font-medium hover:border-primary hover:text-primary transition-colors flex items-center gap-1">
                 <span class="material-symbols-outlined text-[14px]">download</span> Download
-              </a>
+              </button>
             </div>
           </div>
         {/each}

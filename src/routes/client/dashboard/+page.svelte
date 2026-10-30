@@ -51,6 +51,15 @@
     setTimeout(() => toastMsg = '', 3000);
   }
 
+  async function downloadFile(file: any) {
+    try {
+      const res = await apiFetch(`/api/files/${file.id}/download`);
+      const data = await res.json();
+      if (res.ok && data.url) window.open(data.url, '_blank');
+      else showToast('Download failed.');
+    } catch { showToast('Download failed.'); }
+  }
+
   async function payWithStripe(invoiceId: string) {
     payingInvoiceId = invoiceId;
     try {
@@ -195,9 +204,9 @@
                     <span>{fmtDate(file.created_at)}</span>
                   </div>
                 </div>
-                <a href={file.file_url} target="_blank" rel="noopener noreferrer" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-colors shrink-0" title="Download">
+                <button onclick={() => downloadFile(file)} class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-colors shrink-0" title="Download">
                   <span class="material-symbols-outlined text-[18px]">download</span>
-                </a>
+                </button>
               </div>
             {/each}
             {#if recentFiles.length === 0}

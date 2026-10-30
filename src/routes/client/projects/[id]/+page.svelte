@@ -108,7 +108,10 @@
       .eq('project_id', projectId)
       .eq('client_id', clientId)
       .order('created_at', { ascending: false });
-    if (dels) deliverables = dels;
+    if (dels) {
+      deliverables = dels;
+      resolveDeliverableThumbs(dels);
+    }
 
     loading = false;
     setTimeout(() => messagesEnd?.scrollIntoView({ behavior: 'smooth' }), 100);
@@ -151,6 +154,38 @@
     return () => { supabase.removeChannel(channel); };
   });
 
+  let signedThumbUrls = $state<Record<string, string>>({});
+
+  async function resolveDeliverableThumbs(dels: any[]) {
+    const { data: session } = await supabase.auth.getSession();
+    const token = session?.session?.access_token;
+    if (!token) return;
+    for (const del of dels) {
+      const url = del.thumbnail_url || del.file_url;
+      if (!url || del.file_type !== 'image') continue;
+      try {
+        const res = await fetch('/api/files/signed-url', {
+          method: 'POST',
+          headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+          body: JSON.stringify({ file_url: url })
+        });
+        if (res.ok) {
+          const data = await res.json();
+          if (data.url) signedThumbUrls = { ...signedThumbUrls, [del.id]: data.url };
+        }
+      } catch {}
+    }
+  }
+
+  async function downloadFile(file: any) {
+    try {
+      const res = await apiFetch(`/api/files/${file.id}/download`);
+      const data = await res.json();
+      if (res.ok && data.url) window.open(data.url, '_blank');
+      else showToast(data.message || 'Download failed', 'error');
+    } catch { showToast('Download failed.', 'error'); }
+  }
+
   function isLocked(file: any) { return file.is_locked && !file.unlocked_at; }
 
   async function uploadClientFile(e: Event) {
@@ -169,6 +204,7 @@
       project_id: projectId,
       file_name: file.name,
       file_url: urlData?.publicUrl || '',
+      file_path: path,
       file_size: file.size,
       file_type: file.type,
       folder: 'client_uploads',
@@ -433,8 +469,8 @@
               {#each deliverables as del (del.id)}
                 <div class="bg-surface rounded-xl overflow-hidden shadow-sm border border-outline-variant/30 hover:shadow-md hover:border-primary/30 transition-all group cursor-pointer" onclick={() => openProofing(del)}>
                   <div class="h-40 bg-surface-container-high relative overflow-hidden">
-                    {#if del.file_type === 'image' && del.file_url}
-                      <img src={del.thumbnail_url || del.file_url} alt={del.title} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
+                    {#if del.file_type === 'image' && (signedThumbUrls[del.id] || del.file_url)}
+                      <img src={signedThumbUrls[del.id] || ''} alt={del.title} class="w-full h-full object-cover group-hover:scale-105 transition-transform duration-300" />
                     {:else}
                       <div class="w-full h-full flex items-center justify-center bg-gradient-to-br from-red-50 to-red-100">
                         <span class="material-symbols-outlined text-5xl text-red-400">picture_as_pdf</span>
@@ -506,7 +542,7 @@
                         <button onclick={() => payForFile(file)} disabled={payingFileId === file.id} class="bg-primary hover:bg-primary-hover text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 disabled:opacity-50"><span class="material-symbols-outlined text-[14px]">payments</span> {payingFileId === file.id ? 'Redirecting...' : 'Pay to unlock'}</button>
                       {/if}
                     {:else}
-                      <a href={file.file_url} target="_blank" rel="noopener noreferrer" download class="text-primary hover:bg-primary/[0.06] px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 no-underline"><span class="material-symbols-outlined text-[14px]">download</span> Download</a>
+                      <button onclick={() => downloadFile(file)} class="text-primary hover:bg-primary/[0.06] px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1"><span class="material-symbols-outlined text-[14px]">download</span> Download</button>
                     {/if}
                   </div>
                 </div>
