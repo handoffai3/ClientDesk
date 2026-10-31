@@ -103,6 +103,23 @@
     return d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
+  async function downloadMsgFile(fileUrl: string) {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) return;
+      const res = await fetch('/api/files/signed-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ file_url: fileUrl })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) window.open(data.url, '_blank');
+      }
+    } catch {}
+  }
+
   function needsDateSep(msgs: any[], idx: number) {
     if (idx === 0) return true;
     const prev = new Date(msgs[idx - 1].created_at).toDateString();
@@ -353,12 +370,13 @@
               <div class="flex justify-end">
                 <div class="max-w-[70%]">
                   {#if msg.file_url}
+                    {@const fileUrl = msg.file_url}
                     <div class="bg-white border border-outline-variant p-2.5 rounded-lg rounded-tr-sm shadow-xs flex items-center gap-2.5">
                       <div class="w-8 h-8 rounded-lg bg-primary/[0.06] flex items-center justify-center text-primary">
                         <span class="material-symbols-outlined text-[18px]">description</span>
                       </div>
                       <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name || 'File'}</p>
-                      <a href={msg.file_url} target="_blank" rel="noopener noreferrer" class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></a>
+                      <button onclick={() => downloadMsgFile(fileUrl)} class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></button>
                     </div>
                   {:else}
                     <div class="bg-primary text-white p-3 rounded-lg rounded-tr-sm shadow-xs inline-block">
@@ -381,10 +399,11 @@
                   {/if}
                   <div>
                     {#if msg.file_url}
+                      {@const fileUrl = msg.file_url}
                       <div class="bg-white border border-outline-variant p-2.5 rounded-lg rounded-tl-sm shadow-xs flex items-center gap-2.5">
                         <div class="w-8 h-8 rounded-lg bg-secondary/[0.06] flex items-center justify-center text-secondary"><span class="material-symbols-outlined text-[18px]">description</span></div>
                         <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name || 'File'}</p>
-                        <a href={msg.file_url} target="_blank" rel="noopener noreferrer" class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></a>
+                        <button onclick={() => downloadMsgFile(fileUrl)} class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></button>
                       </div>
                     {:else}
                       <div class="bg-white border border-outline-variant text-on-surface p-3 rounded-lg rounded-tl-sm shadow-xs inline-block">

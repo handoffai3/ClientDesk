@@ -216,6 +216,7 @@ CREATE TABLE deliverables (
   title text NOT NULL,
   description text,
   file_url text NOT NULL,
+  file_path text,
   file_type text NOT NULL,
   thumbnail_url text,
   status text DEFAULT 'pending' CHECK (status IN ('pending', 'in_review', 'changes_requested', 'approved')),
@@ -575,6 +576,18 @@ CREATE POLICY "Allow authenticated uploads" ON storage.objects
 CREATE POLICY "Allow authenticated select" ON storage.objects
   FOR SELECT TO authenticated
   USING (bucket_id = 'ClientDeskBucket');
+
+-- Branding bucket (public — logos must be viewable by anonymous visitors)
+CREATE POLICY "branding_public_read" ON storage.objects
+  FOR SELECT USING (bucket_id = 'branding');
+
+CREATE POLICY "branding_auth_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (bucket_id = 'branding');
+
+CREATE POLICY "branding_auth_delete" ON storage.objects
+  FOR DELETE TO authenticated
+  USING (bucket_id = 'branding');
 
 -- ============================================================
 -- TRIGGERS & FUNCTIONS

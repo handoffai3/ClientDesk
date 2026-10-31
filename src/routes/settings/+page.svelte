@@ -99,14 +99,14 @@
 
     brandingMsg = 'Uploading logo...';
     const path = `${agencyId}/logo_${Date.now()}_${file.name}`;
-    const { error: uploadErr } = await supabase.storage.from('agency-assets').upload(path, file);
-    
+    const { error: uploadErr } = await supabase.storage.from('branding').upload(path, file);
+
     if (uploadErr) {
       brandingMsg = 'Upload failed: ' + uploadErr.message;
       return;
     }
 
-    const { data: urlData } = supabase.storage.from('agency-assets').getPublicUrl(path);
+    const { data: urlData } = supabase.storage.from('branding').getPublicUrl(path);
     logoUrl = urlData?.publicUrl || '';
     brandingMsg = 'Logo uploaded! Don\'t forget to save changes.';
     target.value = '';

@@ -5,6 +5,7 @@
   import { authState } from '$lib/auth.svelte';
   import { agencyDataStore } from '../../../stores/agencyData';
   import AgencyHeader from '$lib/components/AgencyHeader.svelte';
+  import { apiFetch } from '$lib/apiFetch';
   import { onMount } from 'svelte';
   import { fmtMoney } from '$lib/format';
 
@@ -62,6 +63,14 @@
   }
 
   function fmt(n: number) { return fmtMoney(n, $agencyDataStore.currency, 0); }
+
+  async function downloadFile(file: any) {
+    try {
+      const res = await apiFetch(`/api/files/${file.id}/download`);
+      const data = await res.json();
+      if (res.ok && data.url) window.open(data.url, '_blank');
+    } catch {}
+  }
   function initials(name: string) { return name?.substring(0, 2).toUpperCase() || 'NA'; }
   function fmtDate(d: string | null) { return d ? new Date(d).toLocaleDateString('en-IN', { month: 'short', day: 'numeric', year: 'numeric' }) : 'N/A'; }
   function fmtTime(d: string) { return new Date(d).toLocaleString('en-IN', { month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' }); }
@@ -481,9 +490,9 @@
                         {/if}
                       </div>
                     </div>
-                    <a href={f.file_url} target="_blank" rel="noopener noreferrer" class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-colors shrink-0" title="Download">
+                    <button onclick={() => downloadFile(f)} class="w-8 h-8 rounded-lg hover:bg-surface-container text-on-surface-variant hover:text-primary flex items-center justify-center transition-colors shrink-0" title="Download">
                       <span class="material-symbols-outlined text-[18px]">download</span>
-                    </a>
+                    </button>
                   </div>
                 {/each}
               </div>

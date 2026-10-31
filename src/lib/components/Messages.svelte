@@ -72,6 +72,23 @@
     }
   }
 
+  async function downloadMsgFile(fileUrl: string) {
+    try {
+      const { data: session } = await supabase.auth.getSession();
+      const token = session?.session?.access_token;
+      if (!token) return;
+      const res = await fetch('/api/files/signed-url', {
+        method: 'POST',
+        headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
+        body: JSON.stringify({ file_url: fileUrl })
+      });
+      if (res.ok) {
+        const data = await res.json();
+        if (data.url) window.open(data.url, '_blank');
+      }
+    } catch {}
+  }
+
   let allMessages = $derived($agencyDataStore.messages);
   let clients = $derived($agencyDataStore.clients);
 
@@ -388,9 +405,10 @@
                         </div>
                         <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name}</p>
                         {#if msg.file_url}
-                          <a href={msg.file_url} target="_blank" rel="noopener noreferrer" class="text-outline hover:text-primary transition-colors">
+                          {@const fileUrl = msg.file_url}
+                          <button onclick={() => downloadMsgFile(fileUrl)} class="text-outline hover:text-primary transition-colors">
                             <span class="material-symbols-outlined text-[18px]">download</span>
-                          </a>
+                          </button>
                         {/if}
                       </div>
                     {/if}
@@ -423,9 +441,10 @@
                           </div>
                           <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name}</p>
                           {#if msg.file_url}
-                            <a href={msg.file_url} target="_blank" rel="noopener noreferrer" class="text-outline hover:text-primary transition-colors">
+                            {@const fileUrl = msg.file_url}
+                            <button onclick={() => downloadMsgFile(fileUrl)} class="text-outline hover:text-primary transition-colors">
                               <span class="material-symbols-outlined text-[18px]">download</span>
-                            </a>
+                            </button>
                           {/if}
                         </div>
                       {/if}
