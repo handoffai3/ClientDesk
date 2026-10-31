@@ -72,7 +72,7 @@
     }
   }
 
-  async function downloadMsgFile(fileUrl: string) {
+  async function downloadMsgFile(msgId: string) {
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
@@ -80,7 +80,7 @@
       const res = await fetch('/api/files/signed-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ file_url: fileUrl })
+        body: JSON.stringify({ type: 'message', id: msgId })
       });
       if (res.ok) {
         const data = await res.json();
@@ -405,8 +405,7 @@
                         </div>
                         <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name}</p>
                         {#if msg.file_url}
-                          {@const fileUrl = msg.file_url}
-                          <button onclick={() => downloadMsgFile(fileUrl)} class="text-outline hover:text-primary transition-colors">
+                          <button onclick={() => downloadMsgFile(msg.id)} class="text-outline hover:text-primary transition-colors">
                             <span class="material-symbols-outlined text-[18px]">download</span>
                           </button>
                         {/if}
@@ -441,8 +440,7 @@
                           </div>
                           <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name}</p>
                           {#if msg.file_url}
-                            {@const fileUrl = msg.file_url}
-                            <button onclick={() => downloadMsgFile(fileUrl)} class="text-outline hover:text-primary transition-colors">
+                            <button onclick={() => downloadMsgFile(msg.id)} class="text-outline hover:text-primary transition-colors">
                               <span class="material-symbols-outlined text-[18px]">download</span>
                             </button>
                           {/if}

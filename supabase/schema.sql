@@ -179,6 +179,7 @@ CREATE TABLE messages (
   sender_id uuid NOT NULL,
   content text,
   file_url text,
+  file_path text,
   file_name text,
   is_read boolean DEFAULT false,
   created_at timestamp DEFAULT now()
@@ -569,13 +570,30 @@ CREATE POLICY "client_pin_replies" ON pin_replies FOR ALL
 -- ============================================================
 -- STORAGE BUCKET POLICIES
 -- ============================================================
-CREATE POLICY "Allow authenticated uploads" ON storage.objects
+-- Agency users: upload to {agencyId}/... or deliverables/{agencyId}/...
+CREATE POLICY "cdb_agency_insert" ON storage.objects
   FOR INSERT TO authenticated
-  WITH CHECK (bucket_id = 'ClientDeskBucket');
+  WITH CHECK (
+    bucket_id = 'ClientDeskBucket'
+    AND (
+      (storage.foldername(name))[1] = (SELECT agency_id::text FROM public.users WHERE id = auth.uid())
+      OR (
+        (storage.foldername(name))[1] = 'deliverables'
+        AND (storage.foldername(name))[2] = (SELECT agency_id::text FROM public.users WHERE id = auth.uid())
+      )
+    )
+  );
 
-CREATE POLICY "Allow authenticated select" ON storage.objects
-  FOR SELECT TO authenticated
-  USING (bucket_id = 'ClientDeskBucket');
+-- Client users: upload to client-uploads/{clientId}/...
+CREATE POLICY "cdb_client_insert" ON storage.objects
+  FOR INSERT TO authenticated
+  WITH CHECK (
+    bucket_id = 'ClientDeskBucket'
+    AND (storage.foldername(name))[1] = 'client-uploads'
+    AND (storage.foldername(name))[2] = (SELECT client_id::text FROM public.client_users WHERE id = auth.uid())
+  );
+
+-- No SELECT policy: direct reads denied. Only the service role signs URLs.
 
 -- Branding bucket (public — logos must be viewable by anonymous visitors)
 CREATE POLICY "branding_public_read" ON storage.objects

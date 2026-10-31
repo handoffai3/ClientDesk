@@ -14,51 +14,82 @@ export const POST: RequestHandler = async ({ request }) => {
     throw error(401, 'Invalid token');
   }
 
-  const { file_url } = await request.json();
-  if (!file_url || typeof file_url !== 'string') {
-    throw error(400, 'file_url is required');
+  const body = await request.json();
+  const { type, id } = body;
+
+  if (!type || !id) {
+    throw error(400, 'type and id are required');
   }
 
-  const storagePath = extractPathFromUrl(file_url);
-  if (!storagePath) {
-    throw error(400, 'Invalid file URL');
+  if (!['file', 'deliverable', 'message'].includes(type)) {
+    throw error(400, 'type must be file, deliverable, or message');
   }
 
-  // Look up the file record by matching storage path or URL
-  const { data: file } = await supabaseAdmin
-    .from('files')
-    .select('id, agency_id, client_id, is_locked, unlocked_at, file_type')
-    .or(`file_path.eq.${storagePath},file_url.ilike.%${storagePath}`)
-    .maybeSingle();
+  // Determine caller role
+  const [agencyUserRes, clientUserRes] = await Promise.all([
+    supabaseAdmin.from('users').select('agency_id').eq('id', user.id).maybeSingle(),
+    supabaseAdmin.from('client_users').select('client_id').eq('id', user.id).maybeSingle(),
+  ]);
+  const callerAgencyId = agencyUserRes.data?.agency_id;
+  const callerClientId = clientUserRes.data?.client_id;
 
-  if (file) {
-    // Check ownership
-    const { data: agencyUser } = await supabaseAdmin
-      .from('users')
-      .select('agency_id')
-      .eq('id', user.id)
+  let storagePath: string | null = null;
+
+  if (type === 'file') {
+    const { data: file } = await supabaseAdmin
+      .from('files')
+      .select('id, agency_id, client_id, is_locked, unlocked_at, file_path, file_url')
+      .eq('id', id)
       .single();
 
-    const { data: clientUser } = await supabaseAdmin
-      .from('client_users')
-      .select('client_id')
-      .eq('id', user.id)
-      .single();
+    if (!file) throw error(404, 'File not found');
 
-    const isAgencyOwner = agencyUser && agencyUser.agency_id === file.agency_id;
-    const isFileClient = clientUser && clientUser.client_id === file.client_id;
+    const isAgencyOwner = callerAgencyId && callerAgencyId === file.agency_id;
+    const isFileClient = callerClientId && callerClientId === file.client_id;
+    if (!isAgencyOwner && !isFileClient) throw error(403, 'Access denied');
 
-    if (!isAgencyOwner && !isFileClient) {
-      throw error(403, 'Access denied');
-    }
-
-    // Check lock for client users (allow deliverable images even when locked for proofing)
     if (isFileClient && !isAgencyOwner) {
-      const locked = file.is_locked && !file.unlocked_at;
-      if (locked && file.file_type !== 'image') {
+      if (file.is_locked && !file.unlocked_at) {
         throw error(403, 'File is locked');
       }
     }
+
+    storagePath = file.file_path || extractPathFromUrl(file.file_url);
+
+  } else if (type === 'deliverable') {
+    const { data: del } = await supabaseAdmin
+      .from('deliverables')
+      .select('id, agency_id, client_id, file_path, file_url, file_type')
+      .eq('id', id)
+      .single();
+
+    if (!del) throw error(404, 'Deliverable not found');
+
+    const isAgencyOwner = callerAgencyId && callerAgencyId === del.agency_id;
+    const isDelClient = callerClientId && callerClientId === del.client_id;
+    if (!isAgencyOwner && !isDelClient) throw error(403, 'Access denied');
+
+    storagePath = del.file_path || extractPathFromUrl(del.file_url);
+
+  } else if (type === 'message') {
+    const { data: msg } = await supabaseAdmin
+      .from('messages')
+      .select('id, agency_id, client_id, file_path, file_url')
+      .eq('id', id)
+      .single();
+
+    if (!msg) throw error(404, 'Message not found');
+    if (!msg.file_url && !msg.file_path) throw error(400, 'Message has no attachment');
+
+    const isAgencyOwner = callerAgencyId && callerAgencyId === msg.agency_id;
+    const isMsgClient = callerClientId && callerClientId === msg.client_id;
+    if (!isAgencyOwner && !isMsgClient) throw error(403, 'Access denied');
+
+    storagePath = msg.file_path || extractPathFromUrl(msg.file_url);
+  }
+
+  if (!storagePath) {
+    throw error(500, 'File path not available');
   }
 
   const { data: signedData, error: signedErr } = await supabaseAdmin.storage
@@ -72,7 +103,7 @@ export const POST: RequestHandler = async ({ request }) => {
   return json({ url: signedData.signedUrl });
 };
 
-function extractPathFromUrl(url: string): string | null {
+function extractPathFromUrl(url: string | null): string | null {
   if (!url) return null;
   const marker = '/ClientDeskBucket/';
   const idx = url.indexOf(marker);

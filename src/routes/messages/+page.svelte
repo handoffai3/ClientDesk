@@ -103,7 +103,7 @@
     return d.toLocaleDateString('en-IN', { weekday: 'long', day: 'numeric', month: 'long' });
   }
 
-  async function downloadMsgFile(fileUrl: string) {
+  async function downloadMsgFile(msgId: string) {
     try {
       const { data: session } = await supabase.auth.getSession();
       const token = session?.session?.access_token;
@@ -111,7 +111,7 @@
       const res = await fetch('/api/files/signed-url', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-        body: JSON.stringify({ file_url: fileUrl })
+        body: JSON.stringify({ type: 'message', id: msgId })
       });
       if (res.ok) {
         const data = await res.json();
@@ -189,6 +189,7 @@
       sender_id: authState.user?.id,
       content: null,
       file_url: fileUrl,
+      file_path: path,
       file_name: file.name,
       is_read: true
     }).select('*').single();
@@ -370,13 +371,12 @@
               <div class="flex justify-end">
                 <div class="max-w-[70%]">
                   {#if msg.file_url}
-                    {@const fileUrl = msg.file_url}
                     <div class="bg-white border border-outline-variant p-2.5 rounded-lg rounded-tr-sm shadow-xs flex items-center gap-2.5">
                       <div class="w-8 h-8 rounded-lg bg-primary/[0.06] flex items-center justify-center text-primary">
                         <span class="material-symbols-outlined text-[18px]">description</span>
                       </div>
                       <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name || 'File'}</p>
-                      <button onclick={() => downloadMsgFile(fileUrl)} class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></button>
+                      <button onclick={() => downloadMsgFile(msg.id)} class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></button>
                     </div>
                   {:else}
                     <div class="bg-primary text-white p-3 rounded-lg rounded-tr-sm shadow-xs inline-block">
@@ -399,11 +399,10 @@
                   {/if}
                   <div>
                     {#if msg.file_url}
-                      {@const fileUrl = msg.file_url}
                       <div class="bg-white border border-outline-variant p-2.5 rounded-lg rounded-tl-sm shadow-xs flex items-center gap-2.5">
                         <div class="w-8 h-8 rounded-lg bg-secondary/[0.06] flex items-center justify-center text-secondary"><span class="material-symbols-outlined text-[18px]">description</span></div>
                         <p class="flex-1 min-w-0 text-sm text-on-surface truncate">{msg.file_name || 'File'}</p>
-                        <button onclick={() => downloadMsgFile(fileUrl)} class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></button>
+                        <button onclick={() => downloadMsgFile(msg.id)} class="text-outline hover:text-primary transition-colors"><span class="material-symbols-outlined text-[18px]">download</span></button>
                       </div>
                     {:else}
                       <div class="bg-white border border-outline-variant text-on-surface p-3 rounded-lg rounded-tl-sm shadow-xs inline-block">

@@ -269,13 +269,12 @@
     const token = session?.session?.access_token;
     if (!token) return;
     for (const del of dels) {
-      const url = del.thumbnail_url || del.file_url;
-      if (!url || del.file_type !== 'image') continue;
+      if (del.file_type !== 'image') continue;
       try {
         const res = await fetch('/api/files/signed-url', {
           method: 'POST',
           headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${token}` },
-          body: JSON.stringify({ file_url: url })
+          body: JSON.stringify({ type: 'deliverable', id: del.id })
         });
         if (res.ok) {
           const data = await res.json();

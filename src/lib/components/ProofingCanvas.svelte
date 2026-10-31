@@ -160,11 +160,11 @@
       // Fetch signed URL for the deliverable file
       try {
         const { data: session } = await supabase.auth.getSession();
-        if (session?.session?.access_token && deliverable.file_url) {
+        if (session?.session?.access_token && deliverable.id) {
           const res = await fetch('/api/files/signed-url', {
             method: 'POST',
             headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${session.session.access_token}` },
-            body: JSON.stringify({ file_url: deliverable.file_url })
+            body: JSON.stringify({ type: 'deliverable', id: deliverable.id })
           });
           if (res.ok) {
             const json = await res.json();
