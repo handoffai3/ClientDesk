@@ -135,14 +135,14 @@
     }
     uploading = true;
     const ext = file.name.split('.').pop();
-    const path = `logos/${authState.agencyId}.${ext}`;
-    const { error } = await supabase.storage.from('ClientDeskBucket').upload(path, file, { upsert: true });
+    const path = `${authState.agencyId}/logo_${Date.now()}.${ext}`;
+    const { error } = await supabase.storage.from('branding').upload(path, file, { upsert: true });
     if (error) {
       showToast('Upload failed: ' + error.message, 'error');
       uploading = false;
       return;
     }
-    const { data: urlData } = supabase.storage.from('ClientDeskBucket').getPublicUrl(path);
+    const { data: urlData } = supabase.storage.from('branding').getPublicUrl(path);
     logoUrl = urlData.publicUrl + '?t=' + Date.now();
     await supabase.from('agencies').update({ logo_url: urlData.publicUrl }).eq('id', authState.agencyId);
     uploading = false;
