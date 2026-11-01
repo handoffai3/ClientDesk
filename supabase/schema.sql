@@ -675,7 +675,9 @@ BEGIN
        AND unlock_deliverable_id IS NULL;
   END IF;
 END $$;
-REVOKE ALL ON FUNCTION unlock_approval_files(uuid, uuid) FROM public;
+REVOKE ALL ON FUNCTION unlock_approval_files(uuid, uuid) FROM PUBLIC;
+REVOKE ALL ON FUNCTION unlock_approval_files(uuid, uuid) FROM anon;
+REVOKE ALL ON FUNCTION unlock_approval_files(uuid, uuid) FROM service_role;
 GRANT EXECUTE ON FUNCTION unlock_approval_files(uuid, uuid) TO authenticated;
 
 -- AI rate limiter: count calls in the last hour, refuse at p_limit, otherwise record one
