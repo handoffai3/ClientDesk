@@ -30,7 +30,7 @@
     },
     {
       icon: 'palette',
-      title: 'White-label on your domain',
+      title: 'White-label: your logo, name and colors',
       body: 'Clients see your agency name and logo instead of ours. You host it yourself, so it can sit on your own domain.',
       img: '/landing/portal.jpg',
       alt: 'A client project page headed with the agency name, showing timeline, approvals and milestones'
