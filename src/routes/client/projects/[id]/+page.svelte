@@ -90,7 +90,7 @@
       supabase.from('timeline_updates').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
       supabase.from('approvals').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
       supabase.from('milestones').select('*').eq('project_id', projectId).order('due_date', { ascending: true }),
-      supabase.from('files').select('*').eq('project_id', projectId).order('created_at', { ascending: false }),
+      supabase.from('files').select('*, unlock_deliverable:deliverables!unlock_deliverable_id(title)').eq('project_id', projectId).order('created_at', { ascending: false }),
       supabase.from('messages').select('*').eq('client_id', clientId).eq('project_id', projectId).order('created_at', { ascending: true }),
       supabase.from('tasks').select('*').eq('project_id', projectId).order('created_at', { ascending: false })
     ]);
@@ -529,7 +529,7 @@
                       <p class="text-xs text-on-surface-variant">{formatSize(file.file_size)}{file.file_size ? ' · ' : ''}{fmtDate(file.created_at)}</p>
                       <div class="flex flex-wrap gap-1 mt-1.5">
                         {#if file.folder === 'client_uploads'}<span class="px-1.5 py-0.5 rounded bg-secondary/[0.08] text-secondary text-[10px] font-medium">Uploaded by you</span>{/if}
-                        {#if locked}<span class="px-1.5 py-0.5 rounded bg-tertiary-container text-on-tertiary-container text-[10px] font-medium flex items-center gap-0.5"><span class="material-symbols-outlined text-[10px]">lock</span>{file.unlock_type === 'approval' ? 'Approval required' : 'Payment required'}</span>{/if}
+                        {#if locked}<span class="px-1.5 py-0.5 rounded bg-tertiary-container text-on-tertiary-container text-[10px] font-medium flex items-center gap-0.5"><span class="material-symbols-outlined text-[10px]">lock</span>{file.unlock_type === 'approval' ? (file.unlock_deliverable?.title ? `Unlocks when you approve '${file.unlock_deliverable.title}'` : 'Approval required') : 'Payment required'}</span>{/if}
                       </div>
                     </div>
                   </div>

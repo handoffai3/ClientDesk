@@ -108,6 +108,7 @@ CREATE TABLE files (
   is_locked boolean DEFAULT false,
   unlock_type text CHECK (unlock_type IN ('approval', 'payment')),
   unlock_invoice_id uuid,
+  unlock_deliverable_id uuid,
   unlocked_at timestamptz,
   created_at timestamp DEFAULT now()
 );
@@ -229,6 +230,10 @@ CREATE TABLE deliverables (
   created_at timestamptz DEFAULT now(),
   updated_at timestamptz DEFAULT now()
 );
+
+-- Add FK after deliverables table exists
+ALTER TABLE files ADD CONSTRAINT files_unlock_deliverable_fkey
+  FOREIGN KEY (unlock_deliverable_id) REFERENCES deliverables(id) ON DELETE SET NULL;
 
 -- PINS (coordinates on deliverables)
 CREATE TABLE pins (
@@ -646,21 +651,32 @@ CREATE TRIGGER trg_deliverable_approval_role
   BEFORE UPDATE ON deliverables
   FOR EACH ROW EXECUTE FUNCTION enforce_deliverable_approval_role();
 
--- Approval unlock: clients cannot UPDATE files directly, so unlocking goes through this function
-CREATE OR REPLACE FUNCTION unlock_approval_files(p_project_id uuid) RETURNS void
+-- Approval unlock: clients cannot UPDATE files directly, so unlocking goes through this function.
+-- p_deliverable_id is optional: when set, only files linked to that deliverable are unlocked;
+-- when null, all approval-locked files in the project are unlocked (legacy behaviour).
+CREATE OR REPLACE FUNCTION unlock_approval_files(p_project_id uuid, p_deliverable_id uuid DEFAULT NULL) RETURNS void
 LANGUAGE plpgsql SECURITY DEFINER SET search_path = public AS $$
 BEGIN
   IF NOT EXISTS (SELECT 1 FROM projects p JOIN client_users cu ON cu.client_id = p.client_id WHERE p.id = p_project_id AND cu.id = auth.uid())
      AND NOT EXISTS (SELECT 1 FROM projects p JOIN users u ON u.agency_id = p.agency_id WHERE p.id = p_project_id AND u.id = auth.uid())
   THEN RAISE EXCEPTION 'not allowed'; END IF;
-  IF NOT EXISTS (SELECT 1 FROM deliverables WHERE project_id = p_project_id AND status = 'approved') THEN
-    RAISE EXCEPTION 'no approved deliverable on this project';
+  IF p_deliverable_id IS NOT NULL THEN
+    IF NOT EXISTS (SELECT 1 FROM deliverables WHERE id = p_deliverable_id AND project_id = p_project_id AND status = 'approved') THEN
+      RAISE EXCEPTION 'deliverable not approved';
+    END IF;
+    UPDATE files SET unlocked_at = now()
+     WHERE unlock_deliverable_id = p_deliverable_id AND is_locked = true AND unlock_type = 'approval' AND unlocked_at IS NULL;
+  ELSE
+    IF NOT EXISTS (SELECT 1 FROM deliverables WHERE project_id = p_project_id AND status = 'approved') THEN
+      RAISE EXCEPTION 'no approved deliverable on this project';
+    END IF;
+    UPDATE files SET unlocked_at = now()
+     WHERE project_id = p_project_id AND is_locked = true AND unlock_type = 'approval' AND unlocked_at IS NULL
+       AND unlock_deliverable_id IS NULL;
   END IF;
-  UPDATE files SET unlocked_at = now()
-   WHERE project_id = p_project_id AND is_locked = true AND unlock_type = 'approval' AND unlocked_at IS NULL;
 END $$;
-REVOKE ALL ON FUNCTION unlock_approval_files(uuid) FROM public;
-GRANT EXECUTE ON FUNCTION unlock_approval_files(uuid) TO authenticated;
+REVOKE ALL ON FUNCTION unlock_approval_files(uuid, uuid) FROM public;
+GRANT EXECUTE ON FUNCTION unlock_approval_files(uuid, uuid) TO authenticated;
 
 -- AI rate limiter: count calls in the last hour, refuse at p_limit, otherwise record one
 CREATE OR REPLACE FUNCTION consume_ai_quota(p_agency_id uuid, p_limit int DEFAULT 10)

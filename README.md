@@ -43,13 +43,29 @@ White-label client portal for agencies. Manage projects, deliverables, invoices,
 2. Add redirect URLs: `https://your-app.vercel.app/**` (or `http://localhost:5173/**` for local dev).
 3. Enable the **Email** provider (enabled by default).
 
-### 3. Set up Stripe
+### 3. Set up Stripe (optional — bring your own keys)
+
+Stripe is **not required** to use ClientDesk. File unlocking works with approval-gated locks (client approves a deliverable → file unlocks). Stripe adds payment-gated locks (client pays an invoice → file unlocks) and invoice checkout.
+
+If you want payment features:
 
 1. Create a [Stripe](https://stripe.com) account and get your **Secret key** and **Publishable key** from the Developers dashboard.
-2. Set up a webhook endpoint pointing to `https://your-app.vercel.app/api/stripe/webhook` with events:
-   - `checkout.session.completed`
+2. Set up a webhook endpoint at `https://your-app.vercel.app/api/stripe/webhook` listening for `checkout.session.completed`.
 3. Copy the **Webhook signing secret** (`whsec_...`).
-4. *(Optional)* For Stripe Connect (agencies receive payments directly), create a Connect platform and copy the **Client ID** (`ca_...`).
+
+**Stripe Connect vs single key:**
+
+| Mode | When to use | Setup |
+|------|-------------|-------|
+| **Single key** | You run one agency and collect payments yourself | Set `STRIPE_SECRET_KEY` and `PUBLIC_STRIPE_PUBLISHABLE_KEY` |
+| **Stripe Connect** | You host multiple agencies who each receive payments to their own Stripe account | Also set `STRIPE_CONNECT_CLIENT_ID` (`ca_...`). Each agency connects via the onboarding flow, and their `stripe_account_id` is stored. Checkout sessions are created on the connected account. |
+
+**What's verified and what isn't:**
+
+- Approval-based file unlock: fully tested end-to-end through the real UI (magic-link login → pin → approve → file unlocks → download).
+- Stripe Checkout session creation: verified — the `/api/stripe/checkout` endpoint creates a session and returns a URL in both direct and Connect modes.
+- Stripe webhook handling: the `/api/stripe/webhook` endpoint parses and verifies signatures, marks invoices paid, and unlocks files. Tested with manually constructed webhook payloads.
+- Full Stripe checkout flow (redirect → hosted page → pay → webhook → redirect back): **not tested end-to-end** in automation. In production, this requires the Stripe CLI (`stripe listen`) for local webhook forwarding, or a deployed endpoint with a real webhook secret.
 
 ### 4. Set up Resend
 

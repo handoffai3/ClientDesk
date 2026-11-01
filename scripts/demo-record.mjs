@@ -1,9 +1,13 @@
 #!/usr/bin/env node
 /**
- * ClientDesk end-to-end demo recorder.
- * Uses REAL browser login (magic-link PKCE) for both agency and client.
- * Pin creation and approval go through the actual UI.
- * Payment simulation via service-role (no STRIPE_SECRET_KEY configured).
+ * ClientDesk end-to-end demo recorder — ALL REAL, no simulations.
+ *
+ * - Agency login: server-side token extraction (callback page is client-only)
+ * - Client login: real PKCE magic-link via callback page
+ * - Pin: real UI (pin mode → click → type → Add Pin)
+ * - Approve: real UI (click Approve button) — also unlocks linked files
+ * - File unlock: verified via DB and client files page (real approve-to-unlock flow)
+ * - AI: real API call + real UI button click
  */
 import { chromium } from 'playwright';
 import { createClient } from '@supabase/supabase-js';
@@ -35,110 +39,89 @@ const sb = createClient(SUPABASE_URL, SERVICE_KEY);
 const PROJECT_ID = 'd31a0694-4ada-41f5-a7e7-c4827bd4cb1b';
 const DELIVERABLE_ID = '8e84ee1d-7533-46a0-9b6f-5924fcdf641e';
 const LOCKED_FILE_ID = '72dc63fd-a6cf-46c7-8eed-0288683a2b41';
-const INVOICE_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const AGENCY_EMAIL = 'melekithm@gmail.com';
 const CLIENT_EMAIL = 'handoffai3@gmail.com';
 
-// ── Auth: real PKCE login via magic link ──
+const PAUSE = 800;
+const WAIT_NAV = 1200;
 
-async function realLogin(page, email) {
+// ── Auth ──
+
+async function realClientLogin(page) {
   const { data, error } = await sb.auth.admin.generateLink({
-    type: 'magiclink', email,
+    type: 'magiclink', email: CLIENT_EMAIL,
     options: { redirectTo: `${PROD_SITE}/client/auth/callback` },
   });
-  if (error) throw new Error(`Magic link failed for ${email}`);
-
-  // Intercept the Supabase verify redirect to rewrite production → localhost
+  if (error) throw new Error('Client magic link failed');
   await page.route('**/auth/v1/verify*', async (route) => {
     const response = await route.fetch({ maxRedirects: 0 });
     const location = response.headers()['location'] || '';
     if (location.includes(PROD_SITE)) {
       await route.fulfill({ status: 302, headers: { location: location.replace(PROD_SITE, SITE) } });
-    } else {
-      await route.fulfill({ response });
-    }
+    } else { await route.fulfill({ response }); }
   });
-
   await page.goto(data.properties.action_link, { waitUntil: 'networkidle', timeout: 30000 });
   await page.waitForTimeout(3000);
   await page.unroute('**/auth/v1/verify*');
-
-  // If landed on production domain, transfer session to localhost
   if (page.url().includes(PROD_SITE)) {
-    const sessionData = await page.evaluate(() => {
-      const keys = Object.keys(localStorage).filter(k => k.includes('auth'));
-      return keys.length ? { key: keys[0], value: localStorage.getItem(keys[0]) } : null;
+    const sd = await page.evaluate(() => {
+      const k = Object.keys(localStorage).filter(k => k.includes('auth'));
+      return k.length ? { key: k[0], value: localStorage.getItem(k[0]) } : null;
     });
-    if (sessionData) {
+    if (sd) {
       await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 15000 });
-      await page.evaluate(({ key, value }) => localStorage.setItem(key, value), sessionData);
+      await page.evaluate(({ key, value }) => localStorage.setItem(key, value), sd);
       await page.goto(SITE, { waitUntil: 'networkidle', timeout: 15000 });
-      await page.waitForTimeout(2000);
+      await page.waitForTimeout(1500);
     }
   }
-
-  // For agency users, check we're on the agency dashboard
-  // For client users, check we're on the client dashboard
-  const url = page.url();
-  const hasSession = await page.evaluate(() => {
-    const keys = Object.keys(localStorage).filter(k => k.includes('auth'));
-    if (!keys.length) return false;
-    try { return !!JSON.parse(localStorage.getItem(keys[0]))?.access_token; } catch { return false; }
+  const ok = await page.evaluate(() => {
+    const k = Object.keys(localStorage).filter(k => k.includes('auth'));
+    try { return !!JSON.parse(localStorage.getItem(k[0]))?.access_token; } catch { return false; }
   });
-  return { url, hasSession };
+  return ok;
 }
 
-// For agency: the magic link callback page checks client_users and signs out non-clients.
-// Agency users need a different approach — use the injectAuth with server-generated tokens
-// since the callback page is client-only.
-async function getAgencySession(email) {
-  const { data, error } = await sb.auth.admin.generateLink({ type: 'magiclink', email });
-  if (error) throw new Error(`Magic link failed: ${error.message}`);
+async function agencyLogin(page) {
+  const { data, error } = await sb.auth.admin.generateLink({ type: 'magiclink', email: AGENCY_EMAIL });
+  if (error) throw new Error('Agency magic link failed');
   const res = await fetch(data.properties.action_link, { redirect: 'manual' });
   const hash = (res.headers.get('location') || '').split('#')[1] || '';
   const p = new URLSearchParams(hash);
   const at = p.get('access_token'), rt = p.get('refresh_token');
-  if (!at || !rt) throw new Error(`Token extraction failed for ${email}`);
+  if (!at || !rt) throw new Error('Agency token extraction failed');
   const payload = JSON.parse(Buffer.from(at.split('.')[1], 'base64').toString());
-  return { at, rt, ei: parseInt(p.get('expires_in') || '3600'), ea: parseInt(p.get('expires_at') || '0'), uid: payload.sub, email: payload.email };
-}
-
-async function injectAgencyAuth(page, sess) {
-  await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 15000 });
   const host = new URL(SUPABASE_URL).hostname.split('.')[0];
   const key = `sb-${host}-auth-token`;
-  await page.evaluate(({ key, at, rt, ei, ea, uid, email }) => {
+  await page.goto(SITE, { waitUntil: 'domcontentloaded', timeout: 15000 });
+  await page.evaluate(({ key, at, rt, uid, email }) => {
     localStorage.setItem(key, JSON.stringify({
       access_token: at, refresh_token: rt, token_type: 'bearer',
-      expires_in: ei, expires_at: ea,
+      expires_in: 3600, expires_at: Math.floor(Date.now()/1000) + 3600,
       user: { id: uid, email, aud: 'authenticated', role: 'authenticated',
         app_metadata: { provider: 'email', providers: ['email'] }, user_metadata: {},
         created_at: new Date().toISOString() },
     }));
-  }, { key, ...sess });
+  }, { key, at, rt, uid: payload.sub, email: payload.email });
   await page.goto(SITE, { waitUntil: 'networkidle', timeout: 20000 });
+  return { at };
 }
 
 // ── Helpers ──
 
 function assert(label, actual, expected) {
-  if (actual !== expected) throw new Error(`ASSERT FAILED: ${label}: got ${JSON.stringify(actual)}, expected ${JSON.stringify(expected)}`);
+  if (actual !== expected) throw new Error(`ASSERT: ${label}: got ${JSON.stringify(actual)}, want ${JSON.stringify(expected)}`);
   console.log(`  ✅ ${label}: ${JSON.stringify(actual)}`);
 }
 function assertMatch(label, val, re) {
-  if (!re.test(val)) throw new Error(`ASSERT FAILED: ${label}: "${val}" !~ ${re}`);
-  console.log(`  ✅ ${label}: matches ${re}`);
-}
-function assertGt(label, val, min) {
-  if (!(val > min)) throw new Error(`ASSERT FAILED: ${label}: ${val} not > ${min}`);
-  console.log(`  ✅ ${label}: ${val} > ${min}`);
+  if (!re.test(val)) throw new Error(`ASSERT: ${label}: "${val}" !~ ${re}`);
+  console.log(`  ✅ ${label}`);
 }
 
 async function frame(page, name, desc) {
   const p = resolve(FRAMES, `${name}.png`);
   await page.screenshot({ path: p });
-  assert(`frame ${name}`, existsSync(p), true);
-  console.log(`  📸 ${desc}`);
+  console.log(`  📸 ${name}: ${desc}`);
 }
 
 function dur(f) {
@@ -148,291 +131,210 @@ function dur(f) {
 
 const evidence = [];
 async function step(name, fn) {
-  console.log(`\n${'='.repeat(60)}\nSTEP: ${name}\n${'='.repeat(60)}`);
+  console.log(`\n── ${name} ──`);
   try { await fn(); evidence.push(`✅ ${name}`); }
-  catch (e) { console.log(`  ❌ ${e.message}`); evidence.push(`❌ ${name}: ${e.message}`); throw e; }
+  catch (e) { evidence.push(`❌ ${name}: ${e.message}`); throw e; }
 }
 
 // ── Main ──
 
 async function main() {
-  console.log('=== Demo Reset ===');
+  console.log('=== Reset ===');
   execSync('node scripts/demo-reset.mjs', { cwd: ROOT, stdio: 'inherit' });
   const { data: d0 } = await sb.from('deliverables').select('status,version').eq('id', DELIVERABLE_ID).single();
-  assert('Reset: deliverable pending', d0.status, 'pending');
-  assert('Reset: deliverable v1', d0.version, 1);
-
-  console.log('\n=== Auth ===');
-  const agSess = await getAgencySession(AGENCY_EMAIL);
-  console.log('  ✅ Agency session obtained');
+  assert('deliverable pending v1', d0.status === 'pending' && d0.version === 1, true);
+  const { data: f0 } = await sb.from('files').select('is_locked,unlock_type,unlock_deliverable_id,unlocked_at').eq('id', LOCKED_FILE_ID).single();
+  assert('file locked (approval)', f0.is_locked === true && f0.unlock_type === 'approval' && f0.unlocked_at === null, true);
+  assert('file linked to deliverable', f0.unlock_deliverable_id, DELIVERABLE_ID);
 
   const browser = await chromium.launch({ headless: true });
-  const dCtx = await browser.newContext({ viewport: { width: 1440, height: 900 }, recordVideo: { dir: resolve(OUT, 'desktop-video'), size: { width: 1440, height: 900 } } });
+  const dCtx = await browser.newContext({
+    viewport: { width: 1440, height: 900 },
+    recordVideo: { dir: resolve(OUT, 'desktop-video'), size: { width: 1440, height: 900 } },
+  });
   const desktop = await dCtx.newPage();
-  const pCtx = await browser.newContext({ viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true, recordVideo: { dir: resolve(OUT, 'phone-video'), size: { width: 390, height: 844 } } });
+  const pCtx = await browser.newContext({
+    viewport: { width: 390, height: 844 }, deviceScaleFactor: 2, isMobile: true, hasTouch: true,
+    recordVideo: { dir: resolve(OUT, 'phone-video'), size: { width: 390, height: 844 } },
+  });
   const phone = await pCtx.newPage();
 
-  // Login client via real PKCE flow
-  console.log('  Logging in client via real magic-link PKCE...');
-  const clLogin = await realLogin(phone, CLIENT_EMAIL);
-  console.log(`  Client login: session=${clLogin.hasSession}, url=${clLogin.url.substring(0, 60)}`);
-  assert('Client has session', clLogin.hasSession, true);
+  console.log('\n=== Auth ===');
+  await agencyLogin(desktop);
+  console.log('  ✅ Agency logged in');
+  const clOk = await realClientLogin(phone);
+  assert('Client PKCE login', clOk, true);
 
   // ── 1. Agency dashboard ──
   await step('1. Agency dashboard', async () => {
-    await injectAgencyAuth(desktop, agSess);
-    await desktop.waitForTimeout(2000);
+    await desktop.waitForTimeout(WAIT_NAV);
     const h = (await desktop.textContent('h1') || '').replace(/\s+/g, ' ').trim();
-    assertMatch('Greeting', h, /Good .* Dave/i);
-    await desktop.waitForTimeout(1500);
-    await frame(desktop, '00-dashboard', 'Agency dashboard');
+    assertMatch('greeting', h, /Good .* Dave/i);
+    await desktop.waitForTimeout(PAUSE);
+    await frame(desktop, '01-dashboard', 'Agency dashboard: stats, task board');
   });
 
   // ── 2. Upload v2 ──
-  await step('2. Upload v2 (agency)', async () => {
+  await step('2. Upload v2', async () => {
     await desktop.goto(`${SITE}/projects/${PROJECT_ID}`, { waitUntil: 'networkidle', timeout: 15000 });
-    await desktop.waitForTimeout(1500);
+    await desktop.waitForTimeout(PAUSE);
     await desktop.locator('button:has-text("Deliverables")').first().click();
-    await desktop.waitForTimeout(2000);
-    assert('v1 visible', await desktop.locator('span:has-text("v1")').count() > 0, true);
-
+    await desktop.waitForTimeout(PAUSE);
     const fc = desktop.waitForEvent('filechooser');
     await desktop.locator('button[title="Upload new version"]').first().click();
     (await fc).setFiles(resolve(ROOT, 'scripts/demo-assets/bluebird-home-v2.png'));
     for (let i = 0; i < 12; i++) {
-      await desktop.waitForTimeout(1000);
+      await desktop.waitForTimeout(800);
       if (await desktop.locator('span:has-text("v2")').count() > 0) break;
     }
-    assert('v2 appeared', await desktop.locator('span:has-text("v2")').count() > 0, true);
-    await desktop.waitForTimeout(1500);
-    await frame(desktop, '01-v2-uploaded', 'v2 uploaded');
+    assert('v2 badge', await desktop.locator('span:has-text("v2")').count() > 0, true);
+    await desktop.waitForTimeout(PAUSE);
+    await frame(desktop, '02-v2-uploaded', 'v2 badge on deliverable card');
   });
 
-  // ── 3. Client pins feedback (REAL UI) ──
+  // ── 3. Client pins (real UI) ──
   await step('3. Client pins feedback', async () => {
     await phone.goto(`${SITE}/client/projects/${PROJECT_ID}`, { waitUntil: 'networkidle', timeout: 15000 });
-    await phone.waitForTimeout(1500);
+    await phone.waitForTimeout(PAUSE);
     await phone.locator('button:has-text("Deliverables")').first().click();
-    await phone.waitForTimeout(1500);
+    await phone.waitForTimeout(PAUSE);
     await phone.locator('text=Home screen design').first().click();
-    await phone.waitForTimeout(5000); // wait for signed URL image to load
+    await phone.waitForTimeout(4000);
 
-    // Enable pin mode (required on mobile)
-    const pinModeBtn = phone.locator('button[title="Enable pin mode"]');
-    assert('Pin mode button exists', await pinModeBtn.count() > 0, true);
-    await pinModeBtn.first().click({ force: true });
-    console.log('  Pin mode enabled');
-    await phone.waitForTimeout(500);
+    await phone.locator('button[title="Enable pin mode"]').first().click({ force: true });
+    await phone.waitForTimeout(300);
 
-    // Click canvas area to place pin
-    const canvasArea = phone.locator('.canvas-area');
-    const caBox = await canvasArea.first().boundingBox();
-    assert('Canvas area found', !!caBox, true);
-    await canvasArea.first().click({ position: { x: caBox.width / 2, y: caBox.height / 3 }, force: true });
-    console.log('  Clicked canvas to place pin');
-    await phone.waitForTimeout(2000);
+    const ca = await phone.locator('.canvas-area').first().boundingBox();
+    await phone.locator('.canvas-area').first().click({ position: { x: ca.width / 2, y: ca.height / 3 }, force: true });
+    await phone.waitForTimeout(1500);
 
-    // Fill the visible textarea (mobile sheet)
-    const textareas = phone.locator('textarea');
-    const taCount = await textareas.count();
-    assertGt('Textareas available', taCount, 0);
-    for (let i = taCount - 1; i >= 0; i--) {
-      if (await textareas.nth(i).isVisible()) {
-        await textareas.nth(i).fill('Make the headline bigger and bolder');
-        console.log(`  Filled textarea[${i}]`);
-        break;
-      }
+    const tas = phone.locator('textarea');
+    for (let i = (await tas.count()) - 1; i >= 0; i--) {
+      if (await tas.nth(i).isVisible()) { await tas.nth(i).fill('Make the headline bigger and bolder'); break; }
     }
-    await phone.waitForTimeout(500);
+    await phone.waitForTimeout(300);
 
-    // Monitor network for the pin insert
-    const pinNetLog = [];
-    phone.on('response', async (resp) => {
-      if (resp.url().includes('/rest/v1/pins')) {
-        let body = ''; try { body = await resp.text(); } catch {}
-        pinNetLog.push({ method: resp.request().method(), status: resp.status(), body: body.substring(0, 300) });
-      }
-    });
-
-    // Click the visible Add Pin button
-    const addPinBtns = phone.locator('button:has-text("Add Pin")');
-    for (let i = (await addPinBtns.count()) - 1; i >= 0; i--) {
-      if (await addPinBtns.nth(i).isVisible()) {
-        await addPinBtns.nth(i).click();
-        console.log(`  Clicked Add Pin[${i}]`);
-        break;
-      }
+    const apbs = phone.locator('button:has-text("Add Pin")');
+    for (let i = (await apbs.count()) - 1; i >= 0; i--) {
+      if (await apbs.nth(i).isVisible()) { await apbs.nth(i).click(); break; }
     }
-    await phone.waitForTimeout(5000);
+    await phone.waitForTimeout(3000);
 
-    // Print network evidence
-    console.log(`  Pin network requests: ${pinNetLog.length}`);
-    for (const r of pinNetLog) {
-      console.log(`    ${r.method} ${r.status} ${r.body.substring(0, 200)}`);
-    }
-
-    // Verify pin in DB (v2 upload creates a new deliverable; pin may be on either)
     const { data: allDels } = await sb.from('deliverables').select('id').eq('project_id', PROJECT_ID);
-    const delIds = allDels.map(d => d.id);
-    const { data: pins } = await sb.from('pins').select('id,content,deliverable_id').in('deliverable_id', delIds);
-    console.log(`  Pins in DB: ${pins?.length || 0}`);
-    if (pins?.length) {
-      assert('Pin content', pins[0].content, 'Make the headline bigger and bolder');
-    } else {
-      await phone.screenshot({ path: resolve(FRAMES, 'debug-pin-fail.png') });
-      throw new Error('Pin not created — check debug-pin-fail.png and network log');
-    }
+    const { data: pins } = await sb.from('pins').select('id,content').in('deliverable_id', allDels.map(d => d.id));
+    assert('pin count', pins.length, 1);
+    assert('pin text', pins[0].content, 'Make the headline bigger and bolder');
 
-    // Reload to show pin visually
     await phone.goto(`${SITE}/client/projects/${PROJECT_ID}`, { waitUntil: 'networkidle', timeout: 15000 });
-    await phone.waitForTimeout(1500);
+    await phone.waitForTimeout(PAUSE);
     await phone.locator('button:has-text("Deliverables")').first().click();
-    await phone.waitForTimeout(1500);
+    await phone.waitForTimeout(PAUSE);
     await phone.locator('text=Home screen design').first().click();
-    await phone.waitForTimeout(5000);
-    await frame(phone, '02-pin-placed', 'Client proofing with pin');
+    await phone.waitForTimeout(4000);
+    await frame(phone, '03-pin-placed', 'Pin #1 on design, feedback count badge');
   });
 
   // ── 4. Agency sees pin ──
   await step('4. Agency sees pin', async () => {
     await desktop.goto(`${SITE}/projects/${PROJECT_ID}`, { waitUntil: 'networkidle', timeout: 15000 });
-    await desktop.waitForTimeout(1500);
+    await desktop.waitForTimeout(PAUSE);
     await desktop.locator('button:has-text("Deliverables")').first().click();
-    await desktop.waitForTimeout(1500);
-    // Pin is on the latest version (v2, shown first), so click the first Review
-    const reviews = desktop.locator('button:has-text("Review")');
-    const cnt = await reviews.count();
-    console.log(`  Review buttons: ${cnt}`);
-    await reviews.first().click();
-    await desktop.waitForTimeout(4000);
-    const feedbackText = await desktop.locator('h3:has-text("Feedback")').first().textContent().catch(() => '');
-    console.log(`  Feedback header: "${feedbackText}"`);
-    assertMatch('Agency sees pin', feedbackText, /1/);
-    await desktop.waitForTimeout(2000);
-    await frame(desktop, '03-agency-sees-pin', 'Agency sees pin feedback');
+    await desktop.waitForTimeout(PAUSE);
+    await desktop.locator('button:has-text("Review")').first().click();
+    await desktop.waitForTimeout(3000);
+    const fb = await desktop.locator('h3:has-text("Feedback")').first().textContent().catch(() => '');
+    assertMatch('feedback(1)', fb, /1/);
+    await desktop.waitForTimeout(PAUSE);
+    await frame(desktop, '04-agency-pin', 'Agency proofing: pin in sidebar');
   });
 
-  // ── 5. Client approves (REAL UI) ──
-  await step('5. Client approves', async () => {
-    // Open proofing canvas on phone
-    await phone.goto(`${SITE}/client/projects/${PROJECT_ID}`, { waitUntil: 'networkidle', timeout: 15000 });
-    await phone.waitForTimeout(1500);
-    await phone.locator('button:has-text("Deliverables")').first().click();
-    await phone.waitForTimeout(1500);
-    await phone.locator('text=Home screen design').first().click();
-    await phone.waitForTimeout(5000);
+  // ── 5. Locked file visible before approval ──
+  await step('5. Locked file (before approval)', async () => {
+    await phone.goto(`${SITE}/client/files`, { waitUntil: 'networkidle', timeout: 15000 });
+    await phone.waitForTimeout(PAUSE);
 
-    // Click the visible Approve button (last one = mobile sticky bar)
-    const approveBtns = phone.locator('button:has-text("Approve")');
-    const abCount = await approveBtns.count();
-    assertGt('Approve buttons', abCount, 0);
-    for (let i = abCount - 1; i >= 0; i--) {
-      if (await approveBtns.nth(i).isVisible()) {
-        await approveBtns.nth(i).click();
-        console.log(`  Clicked Approve[${i}]`);
-        break;
-      }
-    }
+    // Verify the file shows as locked with the deliverable name
+    const lockText = await phone.locator('text=Approval required, text=/Unlocks.*approve/i').first().isVisible({ timeout: 3000 }).catch(() => false)
+      || await phone.locator('span:has-text("Approval")').first().isVisible({ timeout: 2000 }).catch(() => false);
+    assert('locked file visible', lockText, true);
+
+    // Verify "Approve to unlock" button exists
+    const approveBtn = await phone.locator('button:has-text("Approve to unlock")').first().isVisible({ timeout: 2000 }).catch(() => false);
+    assert('approve-to-unlock button', approveBtn, true);
+
+    // DB check: still locked
+    const { data: f1 } = await sb.from('files').select('is_locked,unlocked_at').eq('id', LOCKED_FILE_ID).single();
+    assert('file still locked in DB', f1.is_locked && !f1.unlocked_at, true);
+
+    await frame(phone, '05-locked', 'Locked file: "Approve to unlock"');
+  });
+
+  // ── 6. Client approves → file unlocks (real UI) ──
+  await step('6. Client approves → file unlocks', async () => {
+    await phone.goto(`${SITE}/client/projects/${PROJECT_ID}`, { waitUntil: 'networkidle', timeout: 15000 });
+    await phone.waitForTimeout(PAUSE);
+    await phone.locator('button:has-text("Deliverables")').first().click();
+    await phone.waitForTimeout(PAUSE);
+    await phone.locator('text=Home screen design').first().click();
     await phone.waitForTimeout(4000);
 
-    // Verify in DB (approve goes to whatever deliverable the UI shows — may be v2)
-    const { data: dels } = await sb.from('deliverables').select('id,status,approved_at,version').eq('project_id', PROJECT_ID).order('version', { ascending: false });
-    const approved = dels.find(d => d.status === 'approved');
-    assert('A deliverable is approved', !!approved, true);
-    assert('approved_at set', approved.approved_at !== null, true);
-    console.log(`  Approved v${approved.version}, at: ${approved.approved_at}`);
-
-    // Screenshot showing approved badge
-    await frame(phone, '04-approved', 'Deliverable approved badge');
-
-    // Agency sees approval too
-    await desktop.goto(`${SITE}/projects/${PROJECT_ID}`, { waitUntil: 'networkidle', timeout: 15000 });
-    await desktop.waitForTimeout(1500);
-    await desktop.locator('button:has-text("Deliverables")').first().click();
-    await desktop.waitForTimeout(2000);
-    const approvedBadge = desktop.locator('text=Approved').first();
-    assert('Agency sees Approved', await approvedBadge.isVisible({ timeout: 3000 }), true);
-  });
-
-  // ── 6. Locked files + payment ──
-  await step('6. Files: locked → pay → unlocked', async () => {
-    await phone.goto(`${SITE}/client/files`, { waitUntil: 'networkidle', timeout: 15000 });
-    await phone.waitForTimeout(2000);
-    assert('Payment required visible', await phone.locator('text=Payment required').first().isVisible(), true);
-    await phone.waitForTimeout(1500);
-    await frame(phone, '05-locked-file', 'Locked file (Payment required)');
-
-    await phone.goto(`${SITE}/client/invoices`, { waitUntil: 'networkidle', timeout: 15000 });
-    await phone.waitForTimeout(2000);
-    await frame(phone, '06-stripe-checkout', 'Invoice with Pay Now button');
-
-    // Simulate Stripe webhook (no STRIPE_SECRET_KEY configured for real checkout)
-    console.log('  Simulating Stripe webhook (invoice paid, file unlocked)...');
-    await sb.from('invoices').update({ status: 'paid', paid_at: new Date().toISOString(), stripe_session_id: 'demo_cs_test' }).eq('id', INVOICE_ID);
-    await sb.from('files').update({ unlocked_at: new Date().toISOString() }).eq('id', LOCKED_FILE_ID).eq('is_locked', true);
-
-    const { data: inv } = await sb.from('invoices').select('status').eq('id', INVOICE_ID).single();
-    assert('Invoice paid', inv.status, 'paid');
-    const { data: f } = await sb.from('files').select('unlocked_at').eq('id', LOCKED_FILE_ID).single();
-    assert('File unlocked', f.unlocked_at !== null, true);
-
-    await phone.goto(`${SITE}/client/files`, { waitUntil: 'networkidle', timeout: 15000 });
-    await phone.waitForTimeout(2000);
-    const dlBtns = phone.locator('button:has-text("Download")');
-    assert('Download buttons visible', await dlBtns.count() >= 2, true);
-    await phone.waitForTimeout(1500);
-    await frame(phone, '07-file-unlocked', 'File unlocked, Download visible');
-  });
-
-  // ── 7. AI Summarize ──
-  await step('7. AI Summarize', async () => {
-    // Call AI endpoint directly
-    const res = await fetch(`${SITE}/api/ai/summarize`, {
-      method: 'POST',
-      headers: { 'Content-Type': 'application/json', Authorization: `Bearer ${agSess.at}` },
-      body: JSON.stringify({
-        type: 'pins',
-        data: { pins: [{ number: 1, content: 'Make the headline bigger and bolder', is_resolved: false, replies: [] }] },
-      }),
-    });
-    const json = await res.json();
-    console.log(`  AI status: ${res.status}`);
-    if (res.ok && json.summary) {
-      assertGt('AI summary length', json.summary.length, 20);
-      console.log(`  AI Summary: "${json.summary.substring(0, 120)}..."`);
-    } else {
-      throw new Error(`AI summarize failed: ${res.status} ${json.error || ''}`);
+    const abs = phone.locator('button:has-text("Approve")');
+    for (let i = (await abs.count()) - 1; i >= 0; i--) {
+      if (await abs.nth(i).isVisible()) { await abs.nth(i).click(); break; }
     }
+    await phone.waitForTimeout(3000);
 
-    // Show AI on desktop proofing canvas
+    // Verify deliverable approved
+    const { data: dels } = await sb.from('deliverables').select('status,approved_at,version').eq('project_id', PROJECT_ID).order('version', { ascending: false });
+    const approved = dels.find(d => d.status === 'approved');
+    assert('deliverable approved', !!approved, true);
+    console.log(`  v${approved.version} approved at ${approved.approved_at}`);
+
+    // Verify file unlocked by the approve action
+    const { data: f2 } = await sb.from('files').select('is_locked,unlocked_at,unlock_type,unlock_deliverable_id').eq('id', LOCKED_FILE_ID).single();
+    assert('file unlocked_at set', f2.unlocked_at !== null, true);
+    console.log(`  File unlocked at ${f2.unlocked_at}`);
+
+    await frame(phone, '06-approved', 'APPROVED badge, file now unlocked');
+  });
+
+  // ── 7. Unlocked file downloadable ──
+  await step('7. File download available', async () => {
+    await phone.goto(`${SITE}/client/files`, { waitUntil: 'networkidle', timeout: 15000 });
+    await phone.waitForTimeout(PAUSE);
+
+    const dlBtn = await phone.locator('button:has-text("Download")').count();
+    assert('download buttons visible', dlBtn >= 2, true);
+
+    await frame(phone, '07-unlocked', 'File unlocked: Download button');
+  });
+
+  // ── 8. AI Summarize ──
+  await step('8. AI Summarize', async () => {
     await desktop.goto(`${SITE}/projects/${PROJECT_ID}`, { waitUntil: 'networkidle', timeout: 15000 });
-    await desktop.waitForTimeout(1500);
+    await desktop.waitForTimeout(PAUSE);
     await desktop.locator('button:has-text("Deliverables")').first().click();
-    await desktop.waitForTimeout(1500);
-    // Open the v2 review (first in list — newest first, has the pin)
-    const reviews2 = desktop.locator('button:has-text("Review")');
-    await reviews2.first().click();
-    await desktop.waitForTimeout(4000);
+    await desktop.waitForTimeout(PAUSE);
+    await desktop.locator('button:has-text("Review")').first().click();
+    await desktop.waitForTimeout(3000);
 
     const aiBtn = desktop.locator('button[title="AI Summarize Feedback"]').first();
-    if (await aiBtn.isVisible({ timeout: 3000 })) {
-      await aiBtn.click();
-      await desktop.waitForTimeout(10000);
-      const summaryVis = await desktop.locator('text=AI Summary').first().isVisible().catch(() => false);
-      console.log(`  AI Summary visible on page: ${summaryVis}`);
-    }
-    await frame(desktop, '08-ai-summary', 'AI feedback summary');
-  });
+    assert('AI button visible', await aiBtn.isVisible({ timeout: 3000 }), true);
+    await aiBtn.click();
+    console.log('  Clicked AI Summarize — waiting for response...');
 
-  // ── 8. Client dashboard ──
-  await step('8. Client dashboard', async () => {
-    await phone.goto(`${SITE}/client/dashboard`, { waitUntil: 'networkidle', timeout: 15000 });
-    await phone.waitForTimeout(2000);
-    await frame(phone, '09-client-dashboard', 'Client dashboard');
+    for (let i = 0; i < 20; i++) {
+      await desktop.waitForTimeout(1000);
+      if (await desktop.locator('text=AI Summary').first().isVisible().catch(() => false)) break;
+    }
+    const summaryVis = await desktop.locator('text=AI Summary').first().isVisible().catch(() => false);
+    assert('AI summary visible', summaryVis, true);
+    await desktop.waitForTimeout(PAUSE);
+    await frame(desktop, '08-ai-summary', 'AI Summary in feedback panel');
   });
 
   // ── Save videos ──
-  console.log('\n=== Saving videos ===');
+  console.log('\n=== Videos ===');
   const dPage = desktop, pPage = phone;
   await dCtx.close(); await pCtx.close();
   const dRaw = resolve(OUT, 'desktop-raw.webm'), pRaw = resolve(OUT, 'phone-raw.webm');
@@ -440,82 +342,66 @@ async function main() {
   if (dVid && existsSync(dVid)) cpSync(dVid, dRaw);
   if (pVid && existsSync(pVid)) cpSync(pVid, pRaw);
   await browser.close();
-  console.log(`  Desktop: ${dur(dRaw).toFixed(1)}s`);
-  console.log(`  Phone: ${dur(pRaw).toFixed(1)}s`);
+  const dDur = dur(dRaw), pDur = dur(pRaw);
+  console.log(`  Desktop: ${dDur.toFixed(1)}s  Phone: ${pDur.toFixed(1)}s`);
 
   // ── Post-production ──
-  console.log('\n=== Post-production ===');
-  const captions = [
-    [0,6,"Agency dashboard — projects, clients, invoices"],
-    [7,14,"Upload v2 of a deliverable"],
-    [15,22,"Client pins feedback on the design"],
-    [23,30,"Agency sees the pin instantly"],
-    [31,38,"Client approves — timestamped record"],
-    [39,46,"Files locked until paid"],
-    [47,55,"Stripe test checkout — file unlocks"],
-    [56,64,"AI summarizes all feedback"],
-    [65,75,"Branded client portal"],
-    [76,90,"One-time license · Full source code · DM me"],
-  ];
-  const cf = captions.map(([s,e,t]) =>
-    `drawtext=text='${t.replace(/'/g,"\\'")}':fontsize=28:fontcolor=white:x=(w-text_w)/2:y=h-60:box=1:boxcolor=black@0.6:boxborderw=10:enable='between(t\\,${s}\\,${e})'`
-  ).join(',');
-
+  console.log('\n=== Export ===');
   const demo = resolve(OUT, 'demo.mp4');
   try {
-    execSync(`ffmpeg -y -i "${dRaw}" -i "${pRaw}" -filter_complex "[0:v]scale=1280:900:force_original_aspect_ratio=decrease,pad=1280:1080:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e[d];[1:v]scale=320:693:force_original_aspect_ratio=decrease,pad=640:1080:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e[m];[d][m]hstack=inputs=2[c];[c]${cf}[out]" -map "[out]" -c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p -movflags +faststart "${demo}"`,
+    execSync(`ffmpeg -y -i "${dRaw}" -i "${pRaw}" -filter_complex ` +
+      `"[0:v]scale=1280:900:force_original_aspect_ratio=decrease,pad=1280:1080:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e[d];` +
+      `[1:v]scale=320:693:force_original_aspect_ratio=decrease,pad=640:1080:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e[m];` +
+      `[d][m]hstack=inputs=2[out]" -map "[out]" -c:v libx264 -preset medium -b:v 2500k -maxrate 3000k -bufsize 5000k ` +
+      `-pix_fmt yuv420p -movflags +faststart "${demo}"`,
       { cwd: ROOT, stdio: 'pipe', timeout: 180000 });
     console.log('  ✅ demo.mp4');
   } catch {
-    console.log('  ⚠ Combined failed, desktop-only fallback');
-    execSync(`ffmpeg -y -i "${dRaw}" -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e" -c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p "${demo}"`,
+    execSync(`ffmpeg -y -i "${dRaw}" -vf "scale=1920:1080:force_original_aspect_ratio=decrease,pad=1920:1080:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e" ` +
+      `-c:v libx264 -preset medium -b:v 2500k -pix_fmt yuv420p "${demo}"`,
       { cwd: ROOT, stdio: 'pipe', timeout: 60000 });
     console.log('  ✅ demo.mp4 (desktop-only)');
   }
 
   const vert = resolve(OUT, 'demo-vertical.mp4');
   try {
-    execSync(`ffmpeg -y -i "${pRaw}" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e" -c:v libx264 -preset medium -crf 23 -pix_fmt yuv420p -movflags +faststart "${vert}"`,
+    execSync(`ffmpeg -y -i "${pRaw}" -vf "scale=1080:1920:force_original_aspect_ratio=decrease,pad=1080:1920:(ow-iw)/2:(oh-ih)/2:color=0x1a1a2e" ` +
+      `-c:v libx264 -preset medium -b:v 2500k -maxrate 3000k -bufsize 5000k -pix_fmt yuv420p -movflags +faststart "${vert}"`,
       { cwd: ROOT, stdio: 'pipe', timeout: 60000 });
     console.log('  ✅ demo-vertical.mp4');
-  } catch (e) { console.log(`  ⚠ Vertical failed: ${e.message?.substring(0,100)}`); }
-
-  if (existsSync(resolve(FRAMES, '02-pin-placed.png')))
-    cpSync(resolve(FRAMES, '02-pin-placed.png'), resolve(OUT, 'demo-thumbnail.png'));
+  } catch (e) { console.log(`  ⚠ Vertical: ${e.message?.substring(0,80)}`); }
 
   // ── Report ──
-  console.log('\n' + '='.repeat(60) + '\nFILE REPORT\n' + '='.repeat(60));
-  for (const f of ['demo.mp4','demo-vertical.mp4','desktop-raw.webm','phone-raw.webm']) {
+  console.log('\n' + '='.repeat(60) + '\nFILES');
+  for (const f of ['demo.mp4','demo-vertical.mp4']) {
     const p = resolve(OUT, f);
     if (existsSync(p)) {
       const d = dur(p), mb = (statSync(p).size/1048576).toFixed(2);
       const kbps = d > 0 ? ((statSync(p).size * 8)/(d*1000)).toFixed(0) : '?';
-      console.log(`  ${f}: ${mb} MB, ${d.toFixed(1)}s, ${kbps} kbps`);
+      console.log(`  ${f}: ${mb} MB · ${d.toFixed(1)}s · ${kbps} kbps`);
     } else console.log(`  ${f}: MISSING`);
   }
 
-  console.log('\n' + '='.repeat(60) + '\nFRAME REPORT\n' + '='.repeat(60));
+  console.log('\nFRAMES');
   const descs = {
-    '00-dashboard':'Agency dashboard with stat cards',
-    '01-v2-uploaded':'v2 uploaded, version badge visible',
-    '02-pin-placed':'Client proofing canvas with pin',
-    '03-agency-sees-pin':'Agency sees pin in feedback panel',
-    '04-approved':'Approved badge on deliverable',
-    '05-locked-file':'Locked file (Payment required)',
-    '06-stripe-checkout':'Invoice with Pay Now button',
-    '07-file-unlocked':'File unlocked, Download visible',
-    '08-ai-summary':'AI summary of feedback',
-    '09-client-dashboard':'Client dashboard with branding',
+    '01-dashboard':'Agency dashboard: stat cards, task board',
+    '02-v2-uploaded':'v2 badge on deliverable card',
+    '03-pin-placed':'Pin #1 on design with feedback count',
+    '04-agency-pin':'Agency proofing: pin in sidebar',
+    '05-locked':'Locked file: Approve to unlock',
+    '06-approved':'APPROVED badge, file now unlocked',
+    '07-unlocked':'File unlocked: Download button',
+    '08-ai-summary':'AI Summary in feedback panel',
   };
   for (const [n,d] of Object.entries(descs)) {
-    const exists = existsSync(resolve(FRAMES, `${n}.png`));
-    console.log(`  ${exists ? '✅' : '❌'} ${n}.png — ${d}`);
+    const ex = existsSync(resolve(FRAMES, `${n}.png`));
+    console.log(`  ${ex ? '✅' : '❌'} ${n}.png — ${d}`);
   }
 
-  console.log('\n' + '='.repeat(60) + '\nSTEP EVIDENCE\n' + '='.repeat(60));
+  console.log('\nSTEPS');
   for (const e of evidence) console.log(`  ${e}`);
   const failed = evidence.filter(e => e.startsWith('❌')).length;
-  console.log(`\nRESULT: ${evidence.length - failed} passed, ${failed} failed`);
+  console.log(`\n${evidence.length - failed}/8 passed, ${failed} failed`);
 
   console.log('\n=== Final Reset ===');
   execSync('node scripts/demo-reset.mjs', { cwd: ROOT, stdio: 'inherit' });

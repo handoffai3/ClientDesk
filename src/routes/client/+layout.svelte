@@ -29,7 +29,7 @@
 
     let files = [];
     if (projectIds.length > 0) {
-      const { data: projectFiles } = await supabase.from('files').select('*').in('project_id', projectIds).order('created_at', { ascending: false });
+      const { data: projectFiles } = await supabase.from('files').select('*, unlock_deliverable:deliverables!unlock_deliverable_id(title)').in('project_id', projectIds).order('created_at', { ascending: false });
       files = projectFiles || [];
     }
 

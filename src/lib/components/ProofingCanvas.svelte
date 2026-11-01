@@ -408,9 +408,12 @@
     };
     await supabase.from('deliverables').update(updateData).eq('id', deliverable.id);
 
-    // Unlock files linked via approval
+    // Unlock files linked via approval to this specific deliverable (or project-wide if unlinked)
     if (deliverable.project_id) {
-      await supabase.rpc('unlock_approval_files', { p_project_id: deliverable.project_id });
+      await supabase.rpc('unlock_approval_files', {
+        p_project_id: deliverable.project_id,
+        p_deliverable_id: deliverable.id,
+      });
     }
 
     onStatusChange('approved', updateData);

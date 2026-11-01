@@ -174,7 +174,7 @@
                 {#if locked}
                   <span class="inline-flex items-center gap-1 mt-1 px-1.5 py-0.5 rounded bg-[#fef3c7] text-[#b45309] text-[11px] font-medium">
                     <span class="material-symbols-outlined text-[10px]">lock</span>
-                    {file.unlock_type === 'approval' ? 'Approval required' : 'Payment required'}
+                    {file.unlock_type === 'approval' ? (file.unlock_deliverable?.title ? `Unlocks on approval of '${file.unlock_deliverable.title}'` : 'Approval required') : 'Payment required'}
                   </span>
                 {/if}
               </div>
@@ -185,7 +185,7 @@
               {#if locked}
                 {#if file.unlock_type === 'approval'}
                   <button onclick={() => goApprove(file)} class="bg-[#b45309] hover:bg-[#92400e] text-white px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 transition-colors focus:outline-none">
-                    <span class="material-symbols-outlined text-[14px]">thumb_up</span> Approve
+                    <span class="material-symbols-outlined text-[14px]">thumb_up</span> Approve to unlock
                   </button>
                 {:else if file.unlock_invoice_id}
                   <button onclick={() => payForFile(file)} disabled={payingFileId === file.id} class="bg-primary hover:bg-primary-hover text-on-primary px-2.5 py-1 rounded-md text-xs font-medium flex items-center gap-1 transition-colors focus:outline-none disabled:opacity-50">

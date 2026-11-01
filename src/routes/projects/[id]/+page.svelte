@@ -64,6 +64,7 @@
   let lockFile = $state(false);
   let unlockType = $state<'payment' | 'approval'>('payment');
   let unlockInvoiceId = $state('');
+  let unlockDeliverableId = $state('');
   let uploadingFile = $state(false);
   let fileError = $state('');
 
@@ -326,11 +327,12 @@
     if (lockFile) {
       row.unlock_type = unlockType;
       if (unlockType === 'payment' && unlockInvoiceId) row.unlock_invoice_id = unlockInvoiceId;
+      if (unlockType === 'approval' && unlockDeliverableId) row.unlock_deliverable_id = unlockDeliverableId;
     }
     const { data, error } = await supabase.from('files').insert(row).select('*').single();
     if (error) { fileError = 'Database error: ' + error.message; uploadingFile = false; return; }
     if (data && !files.find(f => f.id === data.id)) files = [data, ...files];
-    uploadFileObj = null; uploadFolder = 'designs'; lockFile = false; unlockType = 'payment'; unlockInvoiceId = '';
+    uploadFileObj = null; uploadFolder = 'designs'; lockFile = false; unlockType = 'payment'; unlockInvoiceId = ''; unlockDeliverableId = '';
     showFileModal = false;
     uploadingFile = false;
     showToast('File uploaded');
@@ -1273,7 +1275,11 @@
                 {#each projectInvoices as inv (inv.id)}<option value={inv.id}>{inv.invoice_number}</option>{/each}
               </select>
             {:else}
-              <p class="text-[11px] text-on-surface-variant">Unlocks automatically when the client approves a deliverable on this project.</p>
+              <select bind:value={unlockDeliverableId} disabled={uploadingFile} class="w-full px-3 py-2 bg-white border border-outline-variant rounded-lg text-sm outline-none focus:border-primary" aria-label="Linked deliverable">
+                <option value="">-- Any deliverable approval --</option>
+                {#each deliverables as del (del.id)}<option value={del.id}>{del.title} (v{del.version})</option>{/each}
+              </select>
+              <p class="text-[11px] text-on-surface-variant">Unlocks when the client approves {unlockDeliverableId ? 'this deliverable' : 'any deliverable on this project'}.</p>
             {/if}
           {/if}
         </div>

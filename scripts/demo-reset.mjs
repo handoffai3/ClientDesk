@@ -2,7 +2,7 @@
 /**
  * Reset demo data to a clean starting state (idempotent).
  * - Deliverable "Home screen design" at v1, status pending, no pins/replies
- * - Final-App-Icons.zip locked (is_locked=true, unlocked_at=null)
+ * - Final-App-Icons.zip locked (unlock_type=approval, linked to Home screen design deliverable)
  * - INV-1001 status 'sent', not paid
  * - Remove any v2+ deliverables
  */
@@ -73,17 +73,20 @@ async function main() {
   });
   console.log('  Reset deliverable to v1/pending:', r.status);
 
-  // Re-lock Final-App-Icons.zip
+  // Re-lock Final-App-Icons.zip: approval-based, linked to the Home screen design deliverable
   r = await api(`/rest/v1/files?id=eq.${FILE_ID}`, {
     method: 'PATCH',
     body: JSON.stringify({
       is_locked: true,
       unlocked_at: null,
+      unlock_type: 'approval',
+      unlock_deliverable_id: DELIVERABLE_ID,
+      unlock_invoice_id: null,
     }),
   });
-  console.log('  Re-locked Final-App-Icons.zip:', r.status);
+  console.log('  Re-locked Final-App-Icons.zip (approval-based):', r.status);
 
-  // Reset invoice to 'sent'
+  // Reset invoice to 'sent' (no locked file linked to it any more)
   r = await api(`/rest/v1/invoices?id=eq.${INVOICE_ID}`, {
     method: 'PATCH',
     body: JSON.stringify({
