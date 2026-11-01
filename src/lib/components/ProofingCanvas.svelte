@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AiSummaryText from '$lib/components/AiSummaryText.svelte';
   import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { onMount } from 'svelte';
@@ -739,7 +740,7 @@
                 {#if aiPinSummarizing}
                   <p class="text-xs text-on-surface-variant">Generating...</p>
                 {:else}
-                  <p class="text-xs text-on-surface whitespace-pre-wrap leading-relaxed">{aiPinSummary}</p>
+                  <AiSummaryText text={aiPinSummary} size="text-xs" />
                 {/if}
               </div>
             </div>

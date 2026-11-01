@@ -47,7 +47,7 @@
       </a>
       <nav class="hidden md:flex gap-1">
         {#each navTabs as tab}
-          <a href={tabHref(tab)} class="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors {activeTab === tab ? 'text-primary bg-primary/[0.06]' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}">{tab}</a>
+          <a href={tabHref(tab)} class="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors {activeTab === tab ? 'text-on-primary-container bg-primary/[0.06]' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}">{tab}</a>
         {/each}
       </nav>
     </div>
@@ -93,7 +93,7 @@
           <a
             href={tabHref(tab)}
             onclick={() => mobileDrawerOpen = false}
-            class="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors {activeTab === tab ? 'text-primary bg-primary/[0.04]' : 'text-on-surface-variant hover:bg-surface-container'}"
+            class="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors {activeTab === tab ? 'text-on-primary-container bg-primary/[0.04]' : 'text-on-surface-variant hover:bg-surface-container'}"
           >
             {tab}
           </a>

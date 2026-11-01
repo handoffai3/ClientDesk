@@ -105,7 +105,7 @@
         {#each tabs as tab}
           <a
             href={tabHref(tab)}
-            class="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors duration-150 focus:outline-none {activeTab === tab ? 'text-primary bg-primary/[0.06]' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
+            class="px-3 py-1.5 rounded-md text-[13px] font-medium transition-colors duration-150 focus:outline-none {activeTab === tab ? 'text-on-primary-container bg-primary/[0.06]' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
           >
             {tab}
           </a>
@@ -169,7 +169,7 @@
 
       <a
         href="/settings"
-        class="w-9 h-9 rounded-lg flex items-center justify-center transition-colors {activeTab === 'Settings' ? 'text-primary bg-primary/[0.06]' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
+        class="w-9 h-9 rounded-lg flex items-center justify-center transition-colors {activeTab === 'Settings' ? 'text-on-primary-container bg-primary/[0.06]' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
       >
         <span class="material-symbols-outlined text-[20px]">settings</span>
       </a>
@@ -234,7 +234,7 @@
           <a
             href={tabHref(tab)}
             onclick={() => mobileDrawerOpen = false}
-            class="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors {activeTab === tab ? 'text-primary bg-primary/[0.04]' : 'text-on-surface-variant hover:bg-surface-container'}"
+            class="flex items-center gap-3 px-5 py-3 text-sm font-medium transition-colors {activeTab === tab ? 'text-on-primary-container bg-primary/[0.04]' : 'text-on-surface-variant hover:bg-surface-container'}"
           >
             {tab}
           </a>

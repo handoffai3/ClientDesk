@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AiSummaryText from '$lib/components/AiSummaryText.svelte';
   import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { authState } from '$lib/auth.svelte';
@@ -712,6 +713,10 @@
   .kanban-track { min-width: 280px; max-width: 360px; flex: 1; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  @media (max-width: 767px) {
+    .overview-row { flex-direction: column; overflow-x: visible; align-items: stretch; min-height: 0; }
+    .overview-row .kanban-track { min-width: 0; max-width: none; width: 100%; flex: none; }
+  }
 </style>
 
 <div class="fixed inset-0 bg-background text-on-background flex overflow-hidden w-full">
@@ -787,7 +792,7 @@
                 {#if aiProjectSummarizing}
                   <p class="text-sm text-on-surface-variant">Generating summary...</p>
                 {:else}
-                  <p class="text-sm text-on-surface whitespace-pre-wrap">{aiProjectSummary}</p>
+                  <AiSummaryText text={aiProjectSummary} />
                 {/if}
               </div>
             </div>
@@ -802,7 +807,7 @@
         {#each ['Overview', 'Deliverables', 'Files', 'Tasks', 'Messages'] as tab}
           <button
             onclick={() => activeTab = tab}
-            class="px-3 py-1 rounded-md text-[13px] font-medium shrink-0 transition-colors {activeTab === tab ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
+            class="px-3 py-1 rounded-md text-[13px] font-medium shrink-0 transition-colors {activeTab === tab ? 'bg-primary-hover text-on-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
           >
             {tab}
             {#if tab === 'Deliverables' && deliverables.length > 0}
@@ -814,7 +819,7 @@
 
       <!-- Overview Tab Content -->
       {#if activeTab === 'Overview'}
-        <div class="flex overflow-x-auto gap-3 pb-6 no-scrollbar items-start min-h-[400px]">
+        <div class="overview-row flex overflow-x-auto gap-3 pb-6 no-scrollbar items-start min-h-[400px]">
           <div class="flex flex-col gap-3 kanban-track shrink-0 bg-surface-container-low p-3 rounded-lg">
             <div class="flex justify-between items-center mb-2 px-1">
               <h3 class="font-title-md text-title-md text-on-surface">Timeline</h3>

@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AiSummaryText from '$lib/components/AiSummaryText.svelte';
   import ClientHeader from '$lib/components/ClientHeader.svelte';
   import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
@@ -262,7 +263,7 @@
                   {#if aiSummarizing}
                     <p class="text-xs text-on-surface-variant">Generating summary...</p>
                   {:else}
-                    <p class="text-xs text-on-surface whitespace-pre-wrap leading-relaxed">{aiSummary}</p>
+                    <AiSummaryText text={aiSummary} size="text-xs" />
                   {/if}
                 </div>
               </div>

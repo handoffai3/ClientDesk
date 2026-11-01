@@ -361,7 +361,7 @@
           {#each validTabs as tab}
             <button
               onclick={() => activeTab = tab}
-              class="px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors {activeTab === tab ? 'bg-primary text-on-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
+              class="px-3 py-1 rounded-md text-[13px] font-medium whitespace-nowrap transition-colors {activeTab === tab ? 'bg-primary-hover text-on-primary' : 'text-on-surface-variant hover:text-on-surface hover:bg-surface-container'}"
             >{tab}</button>
           {/each}
         </div>

@@ -5,6 +5,18 @@ import { requireCaller } from '$lib/server/auth';
 
 const RATE_LIMIT = 10;
 
+const MONTHS = ['Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun', 'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec'];
+function fmtDate(v: unknown): string {
+  const d = new Date(String(v));
+  if (isNaN(d.getTime())) return String(v);
+  return `${d.getUTCDate()} ${MONTHS[d.getUTCMonth()]} ${d.getUTCFullYear()}`;
+}
+
+const STYLE_RULES =
+  'Use only facts present in the data below. Do not invent names, dates, numbers or events. ' +
+  'Write plain text: bullet points that each start with "- ". Do not use markdown bold, italics, tables or "#" headings. ' +
+  'Write dates like "13 Nov 2026". Be concise.';
+
 async function consumeAiQuota(agencyId: string): Promise<'ok' | 'limited' | 'error'> {
   const { data, error } = await supabaseAdmin.rpc('consume_ai_quota', { p_agency_id: agencyId, p_limit: RATE_LIMIT });
   if (error) return 'error';
@@ -39,7 +51,7 @@ export const POST: RequestHandler = async ({ request }) => {
     const thread = messages
       .map((m: any) => `[${m.sender_type}] ${m.content || '(file attachment)'}`)
       .join('\n');
-    prompt = `Summarize this client-agency message thread in 3-5 bullet points. Focus on key decisions, action items, and outstanding questions. Be concise.\n\n${thread}`;
+    prompt = `Summarize this client-agency message thread in 3-5 bullet points. Focus on key decisions, action items, and outstanding questions. ${STYLE_RULES}\n\n${thread}`;
   } else if (type === 'pins') {
     const pins = data?.pins;
     if (!pins || !Array.isArray(pins) || pins.length === 0) {
@@ -49,15 +61,15 @@ export const POST: RequestHandler = async ({ request }) => {
       const replies = (p.replies || []).map((r: any) => `  - [${r.author_type}] ${r.content}`).join('\n');
       return `Pin #${p.number} (${p.is_resolved ? 'Resolved' : 'Open'}): ${p.content}${replies ? '\n' + replies : ''}`;
     }).join('\n\n');
-    prompt = `Summarize this visual proofing feedback in 3-5 bullet points. Group by theme (design, copy, layout, etc). Highlight unresolved items. Be concise.\n\n${feedback}`;
+    prompt = `Summarize this visual proofing feedback in 3-5 bullet points. Group by theme (design, copy, layout, etc). Highlight unresolved items. ${STYLE_RULES}\n\n${feedback}`;
   } else if (type === 'project') {
     const { projectName, timeline, milestones, deliverables, recentMessages } = data || {};
-    const parts: string[] = [`Project: ${projectName || 'Unnamed'}`];
+    const parts: string[] = [`Project: ${projectName || 'Unnamed'}`, `Today: ${fmtDate(new Date().toISOString())}`];
     if (timeline?.length) {
       parts.push('Timeline:\n' + timeline.map((t: any) => `- [${t.status}] ${t.content}`).join('\n'));
     }
     if (milestones?.length) {
-      parts.push('Milestones:\n' + milestones.map((m: any) => `- ${m.title} (${m.is_completed ? 'Done' : 'Pending'}${m.due_date ? ', due ' + m.due_date : ''})`).join('\n'));
+      parts.push('Milestones:\n' + milestones.map((m: any) => `- ${m.title} (${m.is_completed ? 'Done' : 'Pending'}${m.due_date ? ', due ' + fmtDate(m.due_date) : ''})`).join('\n'));
     }
     if (deliverables?.length) {
       parts.push('Deliverables:\n' + deliverables.map((d: any) => `- ${d.title} v${d.version} [${d.status}]`).join('\n'));
@@ -65,7 +77,11 @@ export const POST: RequestHandler = async ({ request }) => {
     if (recentMessages?.length) {
       parts.push('Recent Messages:\n' + recentMessages.slice(0, 10).map((m: any) => `- [${m.sender_type}] ${m.content || '(file)'}`).join('\n'));
     }
-    prompt = `Provide a brief project status summary in 3-5 bullet points. Cover: progress, upcoming deadlines, blockers, and next steps. Be concise.\n\n${parts.join('\n\n')}`;
+    prompt =
+      'Provide a brief project status summary. Put each bullet under one of these short headings, each heading on its own line: ' +
+      'Progress, Deadlines, Risks, Next steps. Skip a heading if the data has nothing for it. ' +
+      'Do not mention pins or feedback unless the data below contains them. ' +
+      `${STYLE_RULES}\n\n${parts.join('\n\n')}`;
   } else {
     return json({ error: 'Invalid summary type' }, { status: 400 });
   }

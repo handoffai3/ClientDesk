@@ -1,4 +1,5 @@
 <script lang="ts">
+  import AiSummaryText from '$lib/components/AiSummaryText.svelte';
   import ClientHeader from '$lib/components/ClientHeader.svelte';
   import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
@@ -305,6 +306,10 @@
   .kanban-track { min-width: 280px; max-width: 360px; flex: 1; }
   .no-scrollbar::-webkit-scrollbar { display: none; }
   .no-scrollbar { -ms-overflow-style: none; scrollbar-width: none; }
+  @media (max-width: 767px) {
+    .overview-row { flex-direction: column; overflow-x: visible; align-items: stretch; min-height: 0; }
+    .overview-row .kanban-track { min-width: 0; max-width: none; width: 100%; flex: none; }
+  }
 </style>
 
 <div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex overflow-hidden w-full">
@@ -362,7 +367,7 @@
                 {#if aiProjectSummarizing}
                   <p class="font-body-md text-body-md text-on-surface-variant">Generating summary...</p>
                 {:else}
-                  <p class="font-body-md text-body-md text-on-surface whitespace-pre-wrap">{aiProjectSummary}</p>
+                  <AiSummaryText text={aiProjectSummary} />
                 {/if}
               </div>
             </div>
@@ -376,7 +381,7 @@
       <!-- Tab Pills -->
       <div class="flex space-x-2 border-b border-surface-variant tab-strip pb-2">
         {#each ['Overview', 'Deliverables', 'Files', 'Tasks', 'Messages'] as tab}
-          <button onclick={() => activeTab = tab} class="px-4 py-2 rounded-full font-label-md text-label-md shrink-0 focus:outline-none transition-colors {activeTab === tab ? 'bg-primary text-on-primary shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/50'}">
+          <button onclick={() => activeTab = tab} class="px-4 py-2 rounded-full font-label-md text-label-md shrink-0 focus:outline-none transition-colors {activeTab === tab ? 'bg-primary-hover text-on-primary shadow-sm' : 'bg-surface text-on-surface-variant hover:bg-surface-variant border border-outline-variant/50'}">
             {tab}
             {#if tab === 'Deliverables' && deliverables.length > 0}
               <span class="ml-1 inline-flex items-center justify-center w-5 h-5 rounded-full text-[10px] font-bold {activeTab === tab ? 'bg-white/20' : 'bg-primary/10 text-primary'}">{deliverables.length}</span>
@@ -387,7 +392,7 @@
 
       <!-- Overview Tab -->
       {#if activeTab === 'Overview'}
-        <div class="flex overflow-x-auto gap-gutter pb-8 no-scrollbar items-start min-h-[400px]">
+        <div class="overview-row flex overflow-x-auto gap-gutter pb-8 no-scrollbar items-start min-h-[400px]">
           <!-- Timeline -->
           <div class="flex flex-col gap-4 kanban-track shrink-0 bg-surface-container-low p-4 rounded-xl">
             <h3 class="font-title-md text-on-surface px-1 mb-2">Timeline</h3>
