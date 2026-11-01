@@ -198,7 +198,7 @@
 
   let realClientsCount = $derived($agencyDataStore.clients.length);
   let activeProjectsCount = $derived($agencyDataStore.projects.filter(p => p.status === 'active').length);
-  let realPendingInvoicesCount = $derived($agencyDataStore.invoices.filter(i => i.status === 'pending').length);
+  let realPendingInvoicesCount = $derived($agencyDataStore.invoices.filter(i => i.status === 'sent' || i.status === 'pending' || i.status === 'overdue').length);
   let totalRevenue = $derived($agencyDataStore.invoices.filter(i => i.status === 'paid').reduce((sum, inv) => sum + Number(inv.total || 0), 0));
 
   const clientsCount = $derived(realClientsCount);
@@ -229,7 +229,7 @@
 
   let invoicesData = $derived($agencyDataStore.invoices.map(i => ({
     id: i.invoice_number,
-    status: (i.status === 'paid' ? 'Paid' : i.status === 'pending' ? 'Pending' : 'Overdue') as 'Paid' | 'Pending' | 'Overdue',
+    status: ({ paid: 'Paid', pending: 'Pending', sent: 'Sent', draft: 'Draft', overdue: 'Overdue' } as Record<string, InvoiceProps['status']>)[i.status] ?? 'Pending',
     clientName: i.clients?.full_name || 'Unknown',
     clientAvatar: i.clients?.avatar_url,
     clientInitials: i.clients?.full_name ? i.clients.full_name.substring(0, 2).toUpperCase() : 'NA',
@@ -685,7 +685,7 @@
                   </div>
                   <span class="text-xs text-on-surface-variant">Pending</span>
                 </div>
-                <span class="text-[15px] font-semibold text-on-surface">{fmtINR($agencyDataStore.invoices.filter(i => i.status === 'pending').reduce((s, i) => s + Number(i.total || 0), 0))}</span>
+                <span class="text-[15px] font-semibold text-on-surface">{fmtINR($agencyDataStore.invoices.filter(i => i.status === 'pending' || i.status === 'sent').reduce((s, i) => s + Number(i.total || 0), 0))}</span>
               </div>
               <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
                 <div class="flex items-center gap-2 mb-2">

@@ -15,6 +15,7 @@ CREATE TABLE agencies (
   stripe_connected boolean DEFAULT false,
   email_notifications_enabled boolean DEFAULT true,
   reply_to_email text,
+  payment_instructions text CHECK (payment_instructions IS NULL OR char_length(payment_instructions) <= 2000),
   currency text DEFAULT 'USD',
   tax_label text DEFAULT 'Tax',
   default_tax_rate numeric(5,2) DEFAULT 0,
@@ -270,7 +271,7 @@ CREATE TABLE ai_usage (
   created_at timestamptz NOT NULL DEFAULT now()
 );
 
--- DEMO REQUESTS (public landing-page form; anon insert only)
+-- DEMO REQUESTS (public landing-page form; inserted by the server endpoint only)
 CREATE TABLE IF NOT EXISTS public.demo_requests (
   id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
   name text NOT NULL CHECK (char_length(name) BETWEEN 1 AND 100),
@@ -707,13 +708,10 @@ END $$;
 REVOKE ALL ON FUNCTION consume_ai_quota(uuid, int) FROM public, anon, authenticated;
 GRANT EXECUTE ON FUNCTION consume_ai_quota(uuid, int) TO service_role;
 
--- Demo requests: anon may insert only; no select/update/delete for anyone but the service role
+-- Demo requests: written only by the server endpoint (service role); no anon/authenticated access
 ALTER TABLE public.demo_requests ENABLE ROW LEVEL SECURITY;
 DROP POLICY IF EXISTS "anon_insert_demo_requests" ON public.demo_requests;
-CREATE POLICY "anon_insert_demo_requests" ON public.demo_requests FOR INSERT TO anon WITH CHECK (true);
-
 REVOKE ALL ON public.demo_requests FROM PUBLIC, anon, authenticated;
-GRANT INSERT ON public.demo_requests TO anon;
 
 -- ============================================================
 -- REALTIME

@@ -38,6 +38,7 @@
   let billingCurrency = $state('USD');
   let billingTaxLabel = $state('Tax');
   let billingTaxRate = $state(0);
+  let billingPaymentInstructions = $state('');
   let savingBilling = $state(false);
   let billingMsg = $state('');
 
@@ -67,6 +68,7 @@
       billingCurrency = agency.currency || 'USD';
       billingTaxLabel = agency.tax_label || 'Tax';
       billingTaxRate = Number(agency.default_tax_rate || 0);
+      billingPaymentInstructions = agency.payment_instructions || '';
       if (agency.notification_settings) {
         notificationSettings = { ...notificationSettings, ...agency.notification_settings };
       }
@@ -249,7 +251,7 @@
     billingMsg = '';
     const { error } = await supabase
       .from('agencies')
-      .update({ currency: billingCurrency, tax_label: billingTaxLabel, default_tax_rate: billingTaxRate })
+      .update({ currency: billingCurrency, tax_label: billingTaxLabel, default_tax_rate: billingTaxRate, payment_instructions: billingPaymentInstructions.trim() || null })
       .eq('id', agencyId);
     if (error) {
       billingMsg = 'Error: ' + error.message;
@@ -521,6 +523,11 @@
             <div>
               <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="bill-tax-rate">Default Tax Rate (%)</label>
               <input id="bill-tax-rate" type="number" min="0" max="100" step="0.01" bind:value={billingTaxRate} class="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg focus:outline-none focus:border-primary text-sm text-on-surface" />
+            </div>
+            <div>
+              <label class="block text-xs font-semibold text-on-surface-variant mb-1" for="bill-payment-instructions">Payment instructions</label>
+              <textarea id="bill-payment-instructions" rows="4" maxlength="2000" bind:value={billingPaymentInstructions} placeholder="e.g. Bank transfer to Acme Studio, IBAN ..., reference the invoice number" class="w-full px-3 py-2 bg-surface border border-outline-variant rounded-lg focus:outline-none focus:border-primary text-sm text-on-surface"></textarea>
+              <p class="text-[11px] text-on-surface-variant mt-1">Shown to clients on unpaid invoices when online card payments aren't set up.</p>
             </div>
           </div>
 

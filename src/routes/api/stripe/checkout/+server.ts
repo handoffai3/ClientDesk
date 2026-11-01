@@ -1,12 +1,14 @@
 import { json, error } from '@sveltejs/kit';
 import type { RequestHandler } from './$types';
 import { env as publicEnv } from '$env/dynamic/public';
+import { env } from '$env/dynamic/private';
 import { stripe } from '$lib/server/stripe';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { requireCaller } from '$lib/server/auth';
 
 export const POST: RequestHandler = async ({ request, url }) => {
   const caller = await requireCaller(request);
+  if (!(env.STRIPE_SECRET_KEY || '').trim()) throw error(503, 'Online payments are not set up.');
   const body = await request.json().catch(() => ({}));
   const { invoice_id } = body;
 

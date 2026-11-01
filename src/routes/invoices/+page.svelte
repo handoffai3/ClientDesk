@@ -330,7 +330,7 @@
           <span class="text-xs text-on-surface-variant">Pending</span>
         </div>
         <p class="text-[15px] font-semibold text-on-surface">{fmt(pendingTotal)}</p>
-        <p class="text-xs text-on-surface-variant mt-0.5">{invoices.filter(i => i.status === 'pending').length} invoices</p>
+        <p class="text-xs text-on-surface-variant mt-0.5">{invoices.filter(i => i.status === 'pending' || i.status === 'sent').length} invoices</p>
       </div>
       <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant">
         <div class="flex items-center gap-2 mb-2">

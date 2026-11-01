@@ -6,6 +6,7 @@
 
   import { clientDataStore } from '../../../stores/clientData';
   import { fmtMoney } from '$lib/format';
+  import { clientInvoiceLabel, isOutstanding } from '$lib/invoiceStatus';
 
   let activeProjects = $derived($clientDataStore.projects.filter(p => p.status === 'active'));
   let recentProject = $derived(activeProjects.length > 0 ? activeProjects[0] : null);
@@ -13,7 +14,8 @@
   let filesCount = $derived($clientDataStore.files.length);
   let recentFiles = $derived($clientDataStore.files.slice(0, 2));
   let invoices = $derived($clientDataStore.invoices);
-  let pendingInvoicesCount = $derived($clientDataStore.invoices.filter(i => i.status === 'pending').length);
+  let pendingInvoicesCount = $derived($clientDataStore.invoices.filter(i => isOutstanding(i.status)).length);
+  let paymentsEnabled = $derived($clientDataStore.paymentsEnabled);
   let loading = $derived(!$clientDataStore.loaded);
 
 
@@ -224,20 +226,28 @@
             {#each invoices as invoice}
               <div class="bg-white rounded-lg p-4 shadow-xs border border-outline-variant flex flex-col">
                 <div class="flex justify-between items-start mb-2">
-                  {#if invoice.status === 'pending' || invoice.status === 'overdue'}
-                    <span class="text-[11px] font-medium text-tertiary bg-tertiary/[0.08] px-1.5 py-0.5 rounded flex items-center gap-1">
-                      <span class="material-symbols-outlined text-[12px]">schedule</span> Pending
-                    </span>
-                  {:else}
+                  {#if clientInvoiceLabel(invoice.status) === 'Paid'}
                     <span class="text-[11px] font-medium text-success bg-success/[0.08] px-1.5 py-0.5 rounded flex items-center gap-1">
                       <span class="material-symbols-outlined text-[12px]">check_circle</span> Paid
+                    </span>
+                  {:else if clientInvoiceLabel(invoice.status) === 'Overdue'}
+                    <span class="text-[11px] font-medium text-error bg-error/[0.08] px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[12px]">warning</span> Overdue
+                    </span>
+                  {:else if clientInvoiceLabel(invoice.status) === 'Draft'}
+                    <span class="text-[11px] font-medium text-on-surface-variant bg-surface-container px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[12px]">edit_note</span> Draft
+                    </span>
+                  {:else}
+                    <span class="text-[11px] font-medium text-tertiary bg-tertiary/[0.08] px-1.5 py-0.5 rounded flex items-center gap-1">
+                      <span class="material-symbols-outlined text-[12px]">schedule</span> Due
                     </span>
                   {/if}
                   <span class="text-xs text-on-surface-variant">{invoice.invoice_number}</span>
                 </div>
                 <p class="text-[13px] text-on-surface-variant truncate mb-1">{invoice.notes || 'Invoice for Services'}</p>
                 <h3 class="text-[15px] font-semibold text-on-surface mb-1">{fmtAmt(invoice.total)}</h3>
-                {#if invoice.status === 'pending' && invoice.due_date}
+                {#if isOutstanding(invoice.status) && invoice.due_date}
                   <p class="text-xs text-error mb-3">Due {fmtDate(invoice.due_date)}</p>
                 {:else}
                   <p class="text-xs text-on-surface-variant mb-3">Issued {fmtDate(invoice.created_at)}</p>
@@ -247,7 +257,11 @@
                     <span class="w-full bg-success/[0.08] text-success py-2 rounded-lg text-sm font-medium flex items-center justify-center gap-1.5">
                       <span class="material-symbols-outlined text-[16px]">check_circle</span> Paid
                     </span>
-                  {:else if invoice.status === 'sent' || invoice.status === 'pending' || invoice.status === 'overdue'}
+                  {:else if isOutstanding(invoice.status) && !paymentsEnabled}
+                    <a href="/client/invoices" class="w-full bg-surface-container hover:bg-surface-container-high text-on-surface py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 no-underline">
+                      <span class="material-symbols-outlined text-[18px]">info</span> How to pay
+                    </a>
+                  {:else if isOutstanding(invoice.status)}
                     <button class="w-full bg-primary hover:bg-primary-hover text-white py-2 rounded-lg text-sm font-medium transition-colors flex items-center justify-center gap-1.5 disabled:opacity-50" onclick={() => payWithStripe(invoice.id)} disabled={payingInvoiceId === invoice.id}>
                       {#if payingInvoiceId === invoice.id}
                         <div class="w-4 h-4 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>

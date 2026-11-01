@@ -1,7 +1,7 @@
 <script lang="ts" module>
   export interface InvoiceProps {
     id: string;
-    status: 'Paid' | 'Pending' | 'Overdue';
+    status: 'Paid' | 'Pending' | 'Overdue' | 'Sent' | 'Draft';
     clientName: string;
     clientInitials?: string;
     clientAvatar?: string;
@@ -18,6 +18,7 @@
       case 'Paid': return 'bg-[#dcfce7] text-[#166534]';
       case 'Pending': return 'bg-[#fef3c7] text-[#b45309]';
       case 'Overdue': return 'bg-error-container text-on-error-container';
+      case 'Sent': return 'bg-[#dbeafe] text-[#1e40af]';
       default: return 'bg-surface-variant text-on-surface-variant';
     }
   });

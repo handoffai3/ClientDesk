@@ -3,7 +3,7 @@
     {
       icon: 'push_pin',
       title: 'Pin feedback on designs',
-      body: 'Clients click straight on the design to leave a comment. Each pin is a thread your team can reply to and mark resolved.',
+      body: 'Clients click straight on the design to leave a comment, and your team sees each pin next to the design.',
       img: '/landing/pins.jpg',
       alt: 'A design with two numbered pins on it and the feedback list beside it'
     },
@@ -24,14 +24,14 @@
     {
       icon: 'auto_awesome',
       title: 'AI feedback summaries',
-      body: 'One click turns a pile of pins into a short summary of what still needs changing. Bring your own key for any OpenAI-compatible provider.',
+      body: 'One click turns a pile of pins into a short summary of what still needs changing. Bring your own key for an OpenAI-compatible provider.',
       img: '/landing/ai-summary.jpg',
       alt: 'An AI summary of two feedback pins above the pin list'
     },
     {
       icon: 'palette',
       title: 'White-label on your domain',
-      body: 'Clients see your agency name and logo, not ours. You deploy it yourself, on your own domain.',
+      body: 'Clients see your agency name and logo instead of ours. You host it yourself, so it can sit on your own domain.',
       img: '/landing/portal.jpg',
       alt: 'A client project page headed with the agency name, showing timeline, approvals and milestones'
     }

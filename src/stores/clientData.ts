@@ -10,5 +10,7 @@ export const clientDataStore = writable({
   files: [] as any[],
   invoices: [] as any[],
   messages: [] as any[],
+  paymentsEnabled: false,
+  paymentInstructions: '',
   loaded: false
 });

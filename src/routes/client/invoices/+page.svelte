@@ -10,6 +10,7 @@
 
   import { clientDataStore } from '../../../stores/clientData';
   import { fmtMoney } from '$lib/format';
+  import { isOutstanding } from '$lib/invoiceStatus';
 
   let activeFilter = $state('all');
   let selectedInvoice = $state<any>(null);
@@ -43,10 +44,14 @@
 
   let filteredInvoices = $derived.by(() => {
     if (activeFilter === 'all') return invoices;
+    if (activeFilter === 'due') return invoices.filter(i => i.status === 'sent' || i.status === 'pending');
     return invoices.filter(i => i.status === activeFilter);
   });
 
-  let pendingTotal = $derived(invoices.filter(i => i.status === 'pending' || i.status === 'sent').reduce((s, i) => s + Number(i.total || 0), 0));
+  let paymentsEnabled = $derived($clientDataStore.paymentsEnabled);
+  let paymentInstructions = $derived($clientDataStore.paymentInstructions);
+  let hasOutstanding = $derived(invoices.some(i => isOutstanding(i.status)));
+  let pendingTotal = $derived(invoices.filter(i => isOutstanding(i.status)).reduce((s, i) => s + Number(i.total || 0), 0));
   let paidTotal = $derived(invoices.filter(i => i.status === 'paid').reduce((s, i) => s + Number(i.total || 0), 0));
 
   function fmt(n: number) {
@@ -130,6 +135,17 @@
   }
 </style>
 
+{#snippet howToPay()}
+  <div class="rounded-lg border border-outline-variant bg-white p-4 mb-5" data-testid="how-to-pay">
+    <h2 class="text-sm font-semibold text-on-surface mb-1 flex items-center gap-1.5"><span class="material-symbols-outlined text-[18px] text-primary">info</span> How to pay</h2>
+    {#if paymentInstructions.trim()}
+      <p class="text-sm text-on-surface-variant whitespace-pre-wrap break-words">{paymentInstructions}</p>
+    {:else}
+      <p class="text-sm text-on-surface-variant">Online payment isn't set up. Please contact {agencyName} to arrange payment.</p>
+    {/if}
+  </div>
+{/snippet}
+
 <!-- Main Interface -->
 <div class="fixed inset-0 bg-background text-on-background font-body-lg text-body-lg flex overflow-hidden w-full {isPrinting ? 'print-hide' : ''}">
   <ClientHeader activeTab="Invoices" />
@@ -164,17 +180,21 @@
             <span class="material-symbols-outlined text-tertiary text-[18px]">schedule</span>
           </div>
           <div>
-            <p class="text-xs text-on-surface-variant mb-0.5">Total Pending</p>
+            <p class="text-xs text-on-surface-variant mb-0.5">Total Due</p>
             <h4 class="text-[15px] font-semibold text-on-surface">{fmt(pendingTotal)}</h4>
           </div>
         </div>
       </div>
 
+      {#if hasOutstanding && !paymentsEnabled}
+        {@render howToPay()}
+      {/if}
+
       <div class="flex gap-1.5 tab-strip pb-1 mb-5">
         {#each [
           { key: 'all', label: 'All' },
           { key: 'paid', label: 'Paid' },
-          { key: 'pending', label: 'Pending' },
+          { key: 'due', label: 'Due' },
           { key: 'overdue', label: 'Overdue' }
         ] as filter}
           <button
@@ -201,9 +221,9 @@
                 <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-error-container text-on-error-container flex items-center gap-1">
                   <span class="material-symbols-outlined text-[12px]">warning</span> Overdue
                 </span>
-              {:else if inv.status === 'sent'}
-                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#dbeafe] text-[#1e40af] flex items-center gap-1">
-                  <span class="material-symbols-outlined text-[12px]">mail</span> Sent
+              {:else if inv.status === 'sent' || inv.status === 'pending'}
+                <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-[#fff7ed] text-[#ea580c] flex items-center gap-1">
+                  <span class="material-symbols-outlined text-[12px]">schedule</span> Due
                 </span>
               {:else if inv.status === 'draft'}
                 <span class="px-2.5 py-1 rounded-full text-[10px] font-bold uppercase tracking-wider bg-surface-variant text-on-surface-variant flex items-center gap-1">
@@ -253,6 +273,10 @@
               {:else if inv.status === 'draft'}
                 <span class="w-full bg-surface-variant text-on-surface-variant font-label-md py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1">
                   <span class="material-symbols-outlined text-[16px]">edit_note</span> Draft
+                </span>
+              {:else if !paymentsEnabled}
+                <span class="w-full bg-surface-variant text-on-surface-variant font-label-md py-2.5 rounded-lg text-sm font-bold flex items-center justify-center gap-1">
+                  <span class="material-symbols-outlined text-[16px]">info</span> How to pay
                 </span>
               {:else}
                 <button
@@ -372,10 +396,15 @@
         </div>
       </div>
 
+      {#if isOutstanding(selectedInvoice.status) && !paymentsEnabled}
+        <div class="px-6 pb-4 bg-surface-container-lowest">{@render howToPay()}</div>
+      {/if}
+
       <div class="px-6 py-4 border-t border-outline-variant/20 bg-surface flex justify-end gap-3">
         <button class="px-5 py-2.5 rounded-lg text-sm font-semibold text-on-surface-variant hover:bg-surface-container transition-colors focus:outline-none" onclick={closeInvoiceModal}>
           Cancel
         </button>
+        {#if isOutstanding(selectedInvoice.status) && paymentsEnabled}
         <button class="px-6 py-2.5 rounded-lg text-sm font-bold text-white bg-[#10b981] hover:bg-[#059669] shadow-md transition-all active:scale-95 focus:outline-none flex items-center gap-2 disabled:opacity-50" onclick={() => payWithStripe(selectedInvoice.id)} disabled={payingInvoiceId === selectedInvoice.id}>
           {#if payingInvoiceId === selectedInvoice.id}
             <svg class="animate-spin h-4 w-4" xmlns="http://www.w3.org/2000/svg" fill="none" viewBox="0 0 24 24"><circle class="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" stroke-width="4"></circle><path class="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z"></path></svg>
@@ -384,6 +413,7 @@
             <span class="material-symbols-outlined text-[18px]">credit_card</span> Pay {fmt(Number(selectedInvoice.total || 0))}
           {/if}
         </button>
+        {/if}
       </div>
     </div>
   </div>

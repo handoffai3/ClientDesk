@@ -4,6 +4,7 @@
   import { apiFetch } from '$lib/apiFetch';
   import { supabase } from '$lib/supabaseClient';
   import { clientStore } from '$lib/clientStore';
+  import { clientDataStore } from '../../../../stores/clientData';
   import { authState } from '$lib/auth.svelte';
   import { page } from '$app/stores';
   import { goto } from '$app/navigation';
@@ -221,7 +222,7 @@
   }
 
   async function payForFile(file: any) {
-    if (!file.unlock_invoice_id) { goto('/client/invoices'); return; }
+    if (!file.unlock_invoice_id || !$clientDataStore.paymentsEnabled) { goto('/client/invoices'); return; }
     payingFileId = file.id;
     try {
       const res = await apiFetch('/api/stripe/checkout', {

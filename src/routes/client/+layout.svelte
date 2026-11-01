@@ -4,6 +4,7 @@
   import { clientStore } from '$lib/clientStore';
   import { clientDataStore } from '../../stores/clientData';
   import { authState } from '$lib/auth.svelte';
+  import { apiFetch } from '$lib/apiFetch';
   import { get } from 'svelte/store';
 
   let { children } = $props();
@@ -15,12 +16,13 @@
     const clientId = cStore.client_id;
     const agencyId = cStore.agency_id;
 
-    const [projectsRes, invoicesRes, messagesRes, filesRes, agencyRes] = await Promise.all([
+    const [projectsRes, invoicesRes, messagesRes, filesRes, agencyRes, payRes] = await Promise.all([
       supabase.from('projects').select('*').eq('client_id', clientId).order('created_at', { ascending: false }),
       supabase.from('invoices').select('*, invoice_items(*)').eq('client_id', clientId).order('created_at', { ascending: false }),
       supabase.from('messages').select('*').eq('client_id', clientId).order('created_at', { ascending: true }),
       supabase.from('files').select('*'), // we'll filter this down below using project IDs
-      supabase.from('agencies').select('logo_url, name, currency, tax_label, default_tax_rate').eq('id', agencyId).single()
+      supabase.from('agencies').select('logo_url, name, currency, tax_label, default_tax_rate, payment_instructions').eq('id', agencyId).single(),
+      apiFetch('/api/payments/config').then(r => (r.ok ? r.json() : { enabled: false })).catch(() => ({ enabled: false }))
     ]);
 
     const agencyData = agencyRes.data;
@@ -43,6 +45,8 @@
       invoices: invoicesRes.data || [],
       messages: messagesRes.data || [],
       files,
+      paymentsEnabled: payRes?.enabled === true,
+      paymentInstructions: agencyData?.payment_instructions || '',
       loaded: true
     });
   }

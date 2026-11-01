@@ -1,8 +1,6 @@
 import { json, type RequestHandler } from '@sveltejs/kit';
 import { createHmac } from 'node:crypto';
-import { createClient } from '@supabase/supabase-js';
 import { env } from '$env/dynamic/private';
-import { env as publicEnv } from '$env/dynamic/public';
 import { supabaseAdmin } from '$lib/server/supabase';
 import { sendOperatorEmail } from '$lib/server/email';
 
@@ -34,9 +32,8 @@ export const POST: RequestHandler = async ({ request, getClientAddress }) => {
   if (countErr) return json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
   if ((count ?? 0) >= MAX_PER_IP_PER_HOUR) return json({ error: 'Too many requests. Please try again later.' }, { status: 429 });
 
-  // Insert with the public anon key so the table's anon-insert-only policy is what authorises it.
-  const anon = createClient(publicEnv.PUBLIC_SUPABASE_URL!, publicEnv.PUBLIC_SUPABASE_ANON_KEY!, { auth: { persistSession: false } });
-  const { error: insErr } = await anon.from('demo_requests').insert({ name, email, agency_name: agency, ip_hash: ipHash });
+  // Only this endpoint can write to demo_requests (service role); anon has no table access.
+  const { error: insErr } = await supabaseAdmin.from('demo_requests').insert({ name, email, agency_name: agency, ip_hash: ipHash });
   if (insErr) return json({ error: 'Something went wrong. Please try again.' }, { status: 500 });
 
   const notify = (env.DEMO_REQUEST_NOTIFY_EMAIL || '').trim();

@@ -77,6 +77,7 @@
   let payingFileId = $state<string | null>(null);
   async function payForFile(file: any) {
     if (!file.unlock_invoice_id) return;
+    if (!$clientDataStore.paymentsEnabled) { goto('/client/invoices'); return; }
     payingFileId = file.id;
     try {
       const res = await apiFetch('/api/stripe/checkout', {
