@@ -5,6 +5,8 @@
  * - Final-App-Icons.zip locked (unlock_type=approval, linked to Home screen design deliverable)
  * - INV-1001 status 'sent', not paid
  * - Remove any v2+ deliverables
+ * - Demo copy restored (no pin/approval claims that contradict the reset state)
+ * - Demo agency's ai_usage rows deleted so the AI quota starts fresh
  */
 import { readFileSync } from 'fs';
 import { resolve } from 'path';
@@ -43,6 +45,16 @@ const DELIVERABLE_ID = '8e84ee1d-7533-46a0-9b6f-5924fcdf641e';
 const FILE_ID = '72dc63fd-a6cf-46c7-8eed-0288683a2b41';
 const INVOICE_ID = 'aaaaaaaa-aaaa-aaaa-aaaa-aaaaaaaaaaaa';
 const PROJECT_ID = 'd31a0694-4ada-41f5-a7e7-c4827bd4cb1b';
+const AGENCY_ID = '3060b4b4-f0d2-4a5e-ad2a-a7f08231f2b6';
+
+const DEMO_MESSAGES = [
+  ['0992d134-131e-42bc-95db-07e4e3d540c0', "First round of the home screen is up for review in the proofing canvas. Let us know what you'd like changed!"],
+  ['151e1ec5-866f-4ecf-b683-60f9895d5cb5', 'Love the direction! Can we try a darker accent on the CTA button?'],
+];
+const DEMO_TIMELINE = [
+  ['815dbc72-65eb-4482-a714-2bad15d4b48e', 'Wireframes and user-flow diagrams reviewed with Sarah.'],
+  ['5f43b026-642d-4534-b549-65d9c45542eb', 'High-fidelity screens in progress — home and tracking views drafted.'],
+];
 
 async function main() {
   console.log('Resetting demo data...');
@@ -99,6 +111,25 @@ async function main() {
 
   // Delete any test messages
   r = await api(`/rest/v1/messages?content=eq.test-demo-cleanup`, { method: 'DELETE' });
+
+  // Restore demo copy
+  for (const [id, content] of DEMO_MESSAGES) {
+    r = await api(`/rest/v1/messages?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ content }) });
+    console.log(`  Restored message ${id.slice(0, 8)}:`, r.status);
+  }
+  for (const [id, content] of DEMO_TIMELINE) {
+    r = await api(`/rest/v1/timeline_updates?id=eq.${id}`, { method: 'PATCH', body: JSON.stringify({ content }) });
+    console.log(`  Restored timeline ${id.slice(0, 8)}:`, r.status);
+  }
+  r = await api(`/rest/v1/milestones?project_id=eq.${PROJECT_ID}&title=eq.Design%20sign-off`, {
+    method: 'PATCH',
+    body: JSON.stringify({ description: 'Client signs off on all screens' }),
+  });
+  console.log('  Restored milestone "Design sign-off":', r.status);
+
+  // Fresh AI quota for the demo agency
+  r = await api(`/rest/v1/ai_usage?agency_id=eq.${AGENCY_ID}`, { method: 'DELETE' });
+  console.log('  Cleared ai_usage:', r.status);
 
   console.log('Done.');
 }
