@@ -42,3 +42,25 @@ export async function sendAgencyEmail(opts: {
     return { ok: false, status: 502, message: err.message || 'Failed to send email' };
   }
 }
+
+/** Sends a platform-level email (not on behalf of any agency), e.g. a notification to the product owner. Uses the same Resend key and sender address. */
+export async function sendOperatorEmail(opts: { to: string; subject: string; html: string; replyTo?: string }): Promise<SendResult> {
+  const apiKey = env.RESEND_API_KEY;
+  if (!apiKey) return { ok: false, status: 500, message: 'Email service not configured' };
+
+  const configured = (env.EMAIL_FROM_ADDRESS || '').trim() || 'onboarding@resend.dev';
+  const from = configured.includes('<') ? configured : `ClientDesk <${configured}>`;
+  try {
+    const { error } = await new Resend(apiKey).emails.send({
+      from,
+      to: [opts.to],
+      subject: opts.subject.replace(/[\r\n]+/g, ' ').slice(0, 200),
+      html: opts.html,
+      ...(opts.replyTo ? { replyTo: opts.replyTo } : {})
+    });
+    if (error) return { ok: false, status: 502, message: error.message };
+    return { ok: true };
+  } catch (err: any) {
+    return { ok: false, status: 502, message: err.message || 'Failed to send email' };
+  }
+}

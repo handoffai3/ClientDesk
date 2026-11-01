@@ -12,8 +12,10 @@
 	import { clientDataStore } from '../stores/clientData';
 	import { supabase } from '$lib/supabaseClient';
 	import { proofingOpen } from '$lib/proofingOpen';
+	import Landing from '$lib/components/Landing.svelte';
 
 	let { children } = $props();
+	const showLanding = $derived($page.url.pathname === '/' && !authState.user);
 
 	onMount(() => {
 		initTheme();
@@ -28,7 +30,8 @@
 			const isPortalRoute = path.startsWith('/client/') || (path as string) === '/client';
 			const clientData = get(clientStore);
 			
-			if (!authState.user && !isAuthRoute) {
+			// '/' is the public landing page for logged-out visitors
+			if (!authState.user && !isAuthRoute && path !== '/') {
 				goto(isPortalRoute ? '/client/login' : '/login');
 			}
 			
@@ -134,6 +137,22 @@
 
 <svelte:head>
 	<link rel="icon" href={favicon} />
+	{#if showLanding}
+		<title>ClientDesk: a client portal you own, with no monthly fees</title>
+		<meta name="description" content="A white-label client portal for agencies. Pin feedback on designs, get timestamped approvals, lock files until approved. $3,500 one-time with full source code." />
+		<link rel="canonical" href="{$page.url.origin}/" />
+		<meta property="og:type" content="website" />
+		<meta property="og:site_name" content="ClientDesk" />
+		<meta property="og:title" content="A client portal you own, with no monthly fees" />
+		<meta property="og:description" content="Pin feedback on designs, get timestamped approvals and lock files until they are approved. $3,500 one-time, full source code." />
+		<meta property="og:url" content="{$page.url.origin}/" />
+		<meta property="og:image" content="{$page.url.origin}/landing/og.jpg" />
+		<meta property="og:image:width" content="1200" />
+		<meta property="og:image:height" content="630" />
+		<meta name="twitter:card" content="summary_large_image" />
+		<meta name="twitter:title" content="A client portal you own, with no monthly fees" />
+		<meta name="twitter:image" content="{$page.url.origin}/landing/og.jpg" />
+	{/if}
 </svelte:head>
 
 {#if authState.loading}
@@ -143,11 +162,13 @@
 			<span class="text-sm text-on-surface-variant">Loading...</span>
 		</div>
 	</div>
+{:else if showLanding}
+	<Landing />
 {:else}
 	{@render children()}
 {/if}
 
-{#if !$proofingOpen && !$clientStore.client_id}
+{#if !$proofingOpen && !$clientStore.client_id && !showLanding}
 <button
 	onclick={globalReload}
 	disabled={isReloading}
