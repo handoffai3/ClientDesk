@@ -34,7 +34,6 @@ import { fileURLToPath } from 'url';
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 
-// Load .env
 const envPath = resolve(__dirname, '..', '.env');
 try {
   const envText = readFileSync(envPath, 'utf-8');

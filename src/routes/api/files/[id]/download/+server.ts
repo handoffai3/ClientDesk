@@ -54,7 +54,6 @@ export const GET: RequestHandler = async ({ params, request }) => {
     }
   }
 
-  // Get the storage path
   const storagePath = file.file_path || extractPathFromUrl(file.file_url);
   if (!storagePath) {
     throw error(500, 'File path not available');
