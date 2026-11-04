@@ -69,11 +69,9 @@ async function main() {
   r = await api(`/rest/v1/pins?id=not.is.null`, { method: 'DELETE' });
   console.log('  Deleted pins:', r.status);
 
-  // Remove any deliverables other than the original v1
   r = await api(`/rest/v1/deliverables?id=neq.${DELIVERABLE_ID}&project_id=eq.${PROJECT_ID}`, { method: 'DELETE' });
   console.log('  Removed extra deliverables:', r.status);
 
-  // Reset the v1 deliverable
   r = await api(`/rest/v1/deliverables?id=eq.${DELIVERABLE_ID}`, {
     method: 'PATCH',
     body: JSON.stringify({
@@ -109,7 +107,6 @@ async function main() {
   });
   console.log('  Reset INV-1001 to sent:', r.status);
 
-  // Delete any test messages
   r = await api(`/rest/v1/messages?content=eq.test-demo-cleanup`, { method: 'DELETE' });
 
   // Restore demo copy
