@@ -66,6 +66,7 @@ async function main() {
   r = await api(`/rest/v1/pin_replies?id=not.is.null`, { method: 'DELETE' });
   console.log('  Deleted pin_replies:', r.status);
 
+  // Call the api to delete the pins
   r = await api(`/rest/v1/pins?id=not.is.null`, { method: 'DELETE' });
   console.log('  Deleted pins:', r.status);
 
@@ -110,6 +111,7 @@ async function main() {
   console.log('  Reset INV-1001 to sent:', r.status);
 
   // Delete any test messages
+  // Call the api to delete the messages
   r = await api(`/rest/v1/messages?content=eq.test-demo-cleanup`, { method: 'DELETE' });
 
   // Restore demo copy
@@ -128,6 +130,7 @@ async function main() {
   console.log('  Restored milestone "Design sign-off":', r.status);
 
   // Fresh AI quota for the demo agency
+  // Call the api to delete the ai usage
   r = await api(`/rest/v1/ai_usage?agency_id=eq.${AGENCY_ID}`, { method: 'DELETE' });
   console.log('  Cleared ai_usage:', r.status);
 
